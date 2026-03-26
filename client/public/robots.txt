@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Allow: /pricing
+Disallow: /admin
+Disallow: /api/
+Disallow: /generate
+Disallow: /history
+
+Sitemap: https://goblinai.com/sitemap.xml
