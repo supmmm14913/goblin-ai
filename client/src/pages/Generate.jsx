@@ -36,9 +36,17 @@ const VIDEO_STYLES = [
 
 const TABS = [
   { id: 'text-image',  label: '文字→圖片', icon: '🖼️', cost: 1 },
-  { id: 'image-image', label: '圖→圖',     icon: '🔄', cost: 2 },
+  { id: 'image-image', label: '圖→圖',     icon: '🔄', cost: 1 },
   { id: 'text-video',  label: '文字→影片', icon: '🎬', cost: 5, badge: 'NEW' },
   { id: 'image-video', label: '圖→影片',   icon: '✨', cost: 5 },
+]
+
+// 品質等級（圖片生成專用）
+const QUALITY_LEVELS = [
+  { id: 'standard', label: '標準', desc: '快速生成', cost: 1, emoji: '⚡' },
+  { id: 'fine',     label: '精細', desc: '高品質',   cost: 2, emoji: '🎨' },
+  { id: 'ultra',    label: '超精細', desc: '細節豐富', cost: 3, emoji: '✨' },
+  { id: 'premium',  label: '頂級',  desc: '最高畫質', cost: 5, emoji: '💎' },
 ]
 
 const MODELS = [
@@ -78,6 +86,7 @@ export default function Generate() {
   const [negativePrompt, setNegativePrompt] = useState('')
   const [style, setStyle] = useState('none')
   const [model, setModel] = useState('flux-schnell')
+  const [quality, setQuality] = useState('standard')
   const [size, setSize] = useState(SIZES[0])
   const [strength, setStrength] = useState(0.7)
   const [inputImage, setInputImage] = useState(null)
@@ -102,8 +111,12 @@ export default function Generate() {
   const currentTab  = TABS.find(t => t.id === tab)
   const needsImage  = tab === 'image-image' || tab === 'image-video'
   const isVideo     = tab === 'text-video'  || tab === 'image-video'
+  const isImage     = tab === 'text-image'  || tab === 'image-image'
   const activeStyles = isVideo ? VIDEO_STYLES : STYLES
   const currentStyle = activeStyles.find(s => s.id === style) || activeStyles[0]
+  const currentQuality = QUALITY_LEVELS.find(q => q.id === quality) || QUALITY_LEVELS[0]
+  // 實際消耗點數：圖片用品質等級，影片固定 5 點
+  const actualCost = isImage ? currentQuality.cost : currentTab.cost
 
   const examples = EXAMPLE_PROMPTS[style] || EXAMPLE_PROMPTS.none
 
@@ -115,8 +128,8 @@ export default function Generate() {
   const handleGenerate = async () => {
     if (!prompt.trim() && tab !== 'image-video') return toast.error('請輸入提示詞')
     if (needsImage && !inputImage) return toast.error('請上傳參考圖片')
-    if ((user?.credits ?? 0) < currentTab.cost) {
-      return toast.error(`點數不足！需要 ${currentTab.cost} 點，目前剩 ${user?.credits ?? 0} 點`)
+    if ((user?.credits ?? 0) < actualCost) {
+      return toast.error(`點數不足！需要 ${actualCost} 點，目前剩 ${user?.credits ?? 0} 點`)
     }
 
     setLoading(true); setResult(null); setLoadingProgress(0)
@@ -131,7 +144,7 @@ export default function Generate() {
       if (tab === 'text-image') {
         const res = await axios.post('/generate/text-to-image', {
           prompt: styledPrompt, negative_prompt: negativePrompt,
-          model, width: size.w, height: size.h, style
+          model, width: size.w, height: size.h, style, quality
         })
         setResult(res.data.image_url); setResultType('image')
         if (res.data.credits !== undefined) updateCredits(res.data.credits)
@@ -141,7 +154,7 @@ export default function Generate() {
       } else if (tab === 'image-image') {
         const fd = new FormData()
         fd.append('image', inputImage); fd.append('prompt', styledPrompt)
-        fd.append('strength', strength); fd.append('style', style)
+        fd.append('strength', strength); fd.append('style', style); fd.append('quality', quality)
         const res = await axios.post('/generate/image-to-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
         setResult(res.data.image_url); setResultType('image')
         if (res.data.credits !== undefined) updateCredits(res.data.credits)
@@ -332,6 +345,28 @@ export default function Generate() {
           </div>
         )}
 
+        {/* 品質選擇器（圖片生成專用） */}
+        {isImage && (
+          <div>
+            <label className="text-xs text-white/40 mb-2 block">🎯 圖片品質</label>
+            <div className="grid grid-cols-4 gap-2">
+              {QUALITY_LEVELS.map(q => (
+                <button key={q.id} onClick={() => setQuality(q.id)} disabled={loading}
+                  className={`flex flex-col items-center gap-1 p-2 rounded-xl border text-xs font-semibold transition-all ${
+                    quality === q.id
+                      ? 'border-[#c8ff3e] bg-[#c8ff3e]/10 text-[#c8ff3e]'
+                      : 'border-white/10 text-white/50 hover:border-white/30'
+                  }`}>
+                  <span className="text-lg">{q.emoji}</span>
+                  <span>{q.label}</span>
+                  <span className={`text-[10px] font-black ${quality === q.id ? 'text-[#c8ff3e]' : 'text-white/30'}`}>{q.cost} 點</span>
+                  <span className="text-[9px] opacity-60">{q.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* 進階設定 */}
         <div>
           <button onClick={() => setShowAdvanced(!showAdvanced)}
@@ -373,13 +408,14 @@ export default function Generate() {
           {loading ? (
             <><span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />{loadingMsg}</>
           ) : (
-            <><Wand2 size={15} />生成 · {currentTab.cost} 點
+            <><Wand2 size={15} />生成 · {actualCost} 點
+              {isImage && quality !== 'standard' && <span className="opacity-70 text-xs">({currentQuality.emoji}{currentQuality.label})</span>}
               {style !== 'none' && <span className="opacity-70 text-xs">({currentStyle.emoji}{currentStyle.label})</span>}
             </>
           )}
         </button>
 
-        {(user?.credits ?? 0) < currentTab.cost && (
+        {(user?.credits ?? 0) < actualCost && (
           <Link to="/pricing" className="block text-center text-xs hover:underline bg-[#c8ff3e]/5 border border-[#c8ff3e]/20 rounded-xl py-2.5" style={{color:'#c8ff3e'}}>
             點數不足？購買點數 →
           </Link>

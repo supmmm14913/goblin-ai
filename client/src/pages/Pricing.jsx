@@ -5,79 +5,78 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Check, X, Coins, Sparkles, Zap, MessageCircle, Image, Video } from 'lucide-react'
 
+// 一次性購買點數包（最低 50 點）
 const PLANS = [
   {
     id: 'starter',
-    name: 'Starter',
+    name: '入門包',
     badge: null,
-    monthlyPrice: 5,
-    annualPrice: 4,
+    price: 5,
     credits: 50,
+    perCredit: 0.10,
     color: 'border-white/10',
     btnClass: 'btn-secondary',
     features: [
-      { text: '50 點數 / 月', included: true },
-      { text: '50 張圖片 或 10 支影片', included: true },
+      { text: '50 點數（一次性）', included: true },
+      { text: '50 張標準圖片', included: true },
       { text: '所有 AI 模型', included: true },
-      { text: '點數永久有效', included: true },
+      { text: '點數永久不過期', included: true },
       { text: '生成歷史記錄', included: true },
       { text: '優先生成', included: false },
-      { text: '最低點數單價', included: false },
     ]
   },
   {
     id: 'popular',
-    name: 'Creator',
+    name: '進階包',
     badge: { text: 'MOST POPULAR', color: 'badge-neon' },
-    monthlyPrice: 15,
-    annualPrice: 11,
-    credits: 200,
+    price: 12,
+    credits: 150,
+    perCredit: 0.08,
     color: 'border-[#c8ff3e]/40',
     btnClass: 'btn-neon',
     glow: 'glow-neon',
     features: [
-      { text: '200 點數 / 月', included: true },
-      { text: '200 張圖片 或 40 支影片', included: true },
+      { text: '150 點數（一次性）', included: true },
+      { text: '150 張標準圖或 30 部影片', included: true },
       { text: '所有 AI 模型', included: true },
-      { text: '點數永久有效', included: true },
+      { text: '點數永久不過期', included: true },
       { text: '生成歷史記錄', included: true },
       { text: '優先生成佇列', included: true },
-      { text: '最低點數單價', included: false },
     ]
   },
   {
     id: 'pro',
-    name: 'Pro',
+    name: '專業包',
     badge: { text: 'BEST VALUE', color: 'badge-pink' },
-    monthlyPrice: 30,
-    annualPrice: 22,
-    credits: 600,
+    price: 25,
+    credits: 350,
+    perCredit: 0.07,
     color: 'border-[#ff3d8a]/40',
     btnClass: 'btn-pink',
     glow: 'glow-pink',
     features: [
-      { text: '600 點數 / 月', included: true },
-      { text: '600 張圖片 或 120 支影片', included: true },
+      { text: '350 點數（一次性）', included: true },
+      { text: '350 張標準圖或 70 部影片', included: true },
       { text: '所有 AI 模型', included: true },
-      { text: '點數永久有效', included: true },
+      { text: '點數永久不過期', included: true },
       { text: '生成歷史記錄', included: true },
-      { text: '優先生成佇列', included: true },
-      { text: '最低點數單價', included: true, badge: '90% CHEAPER' },
+      { text: '優先生成佇列', included: true, badge: '最划算' },
     ]
   },
 ]
 
 const CREDIT_COSTS = [
-  { icon: '🖼️', label: '文字生成圖片', cost: 1 },
-  { icon: '🔄', label: '圖片轉圖片',   cost: 2 },
-  { icon: '🎬', label: '文字生成影片', cost: 5 },
-  { icon: '✨', label: '圖片生成影片', cost: 5 },
+  { icon: '🖼️', label: '標準圖片（快速）',   cost: 1 },
+  { icon: '🎨', label: '精細圖片（高品質）',  cost: 2 },
+  { icon: '✨', label: '超精細圖片',          cost: 3 },
+  { icon: '💎', label: '頂級圖片（最高畫質）',cost: 5 },
+  { icon: '🎬', label: '文字生成影片',        cost: 5 },
+  { icon: '🔄', label: '圖片生成影片',        cost: 5 },
 ]
 
 export default function Pricing() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [annual, setAnnual] = useState(false)
   const [loading, setLoading] = useState(null)
   const [showManual, setShowManual] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState(null)
@@ -100,17 +99,14 @@ export default function Pricing() {
     }
   }
 
-  const getPrice = (plan) => annual ? plan.annualPrice : plan.monthlyPrice
-  const getSavings = (plan) => Math.round((1 - plan.annualPrice / plan.monthlyPrice) * 100)
-
   return (
     <div className="min-h-screen bg-[#08080a]">
       {/* 促銷橫幅 */}
       <div className="bg-gradient-to-r from-[#c8ff3e]/15 via-[#ff3d8a]/15 to-[#c8ff3e]/15 border-b border-white/5 py-2 px-4 text-center text-sm">
-        <span className="badge-neon mr-2">限時</span>
-        <span className="text-white/60">年付方案享 </span>
-        <span className="text-neon font-bold">25% 折扣</span>
-        <span className="text-white/60"> · 點數永不過期</span>
+        <span className="badge-neon mr-2">買斷制</span>
+        <span className="text-white/60">最低購買 </span>
+        <span className="text-neon font-bold">50 點數</span>
+        <span className="text-white/60"> · 一次購買 · 永久使用 · 不過期</span>
       </div>
 
       {/* Navbar */}
@@ -141,23 +137,8 @@ export default function Pricing() {
       <div className="max-w-6xl mx-auto px-4 py-16">
         {/* Header */}
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-black mb-3 tracking-tight">選擇你的方案</h1>
-          <p className="text-white/40 mb-8">點數永久有效 · 按需購買 · 隨時取消</p>
-
-          {/* 月付/年付切換 */}
-          <div className="inline-flex items-center bg-white/5 border border-white/10 rounded-full p-1 gap-1">
-            <button onClick={() => setAnnual(false)}
-              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all ${!annual ? 'bg-white text-black' : 'text-white/50 hover:text-white'}`}>
-              月付
-            </button>
-            <button onClick={() => setAnnual(true)}
-              className={`px-5 py-2 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${annual ? 'bg-white text-black' : 'text-white/50 hover:text-white'}`}>
-              年付
-              <span className={`text-xs font-black px-1.5 py-0.5 rounded-full ${annual ? 'bg-[#c8ff3e] text-black' : 'bg-[#c8ff3e]/20 text-neon'}`}>
-                省 25%
-              </span>
-            </button>
-          </div>
+          <h1 className="text-4xl font-black mb-3 tracking-tight">購買點數</h1>
+          <p className="text-white/40 mb-8">一次購買 · 永久有效 · 最低 50 點起</p>
 
           {user && (
             <div className="mt-4 inline-flex items-center gap-2 bg-[#c8ff3e]/10 border border-[#c8ff3e]/20 text-neon px-4 py-2 rounded-full text-sm">
@@ -179,17 +160,15 @@ export default function Pricing() {
               <div className="mb-6">
                 <h3 className="font-black text-xl mb-1">{plan.name}</h3>
                 <div className="flex items-end gap-1 mt-3">
-                  <span className="text-5xl font-black">${getPrice(plan)}</span>
-                  <span className="text-white/40 text-sm mb-2">/月</span>
+                  <span className="text-5xl font-black">${plan.price}</span>
+                  <span className="text-white/40 text-sm mb-2">/ 一次</span>
                 </div>
-                {annual && (
-                  <div className="text-white/30 text-xs mt-1">
-                    年付 ${getPrice(plan) * 12} · 省 {getSavings(plan)}%
-                  </div>
-                )}
+                <div className="text-white/30 text-xs mt-1">
+                  每點 ${plan.perCredit.toFixed(2)} · 買越多越划算
+                </div>
                 <div className="mt-2">
                   <span className="text-neon font-bold">{plan.credits} 點數</span>
-                  <span className="text-white/30 text-xs ml-2">/ 月</span>
+                  <span className="text-white/30 text-xs ml-2">永久有效</span>
                 </div>
               </div>
 

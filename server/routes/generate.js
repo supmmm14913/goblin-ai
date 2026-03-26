@@ -8,12 +8,28 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
 
-// 點數費用
+// 點數費用（基本費用）
 const CREDIT_COST = {
   'text-to-image': 1,
-  'image-to-image': 2,
+  'image-to-image': 1,
   'text-to-video': 5,
   'image-to-video': 5,
+};
+
+// 圖片品質等級對應點數消耗
+const QUALITY_COST = {
+  'standard': 1,  // 標準品質
+  'fine':     2,  // 精細品質
+  'ultra':    3,  // 超精細
+  'premium':  5,  // 頂級品質
+};
+
+// 品質等級對應模型參數
+const QUALITY_PARAMS = {
+  'standard': { model: 'flux-schnell', steps: 4,  guidance: 3.5 },
+  'fine':     { model: 'flux-dev',     steps: 28, guidance: 3.5 },
+  'ultra':    { model: 'flux-dev',     steps: 50, guidance: 4.5 },
+  'premium':  { model: 'flux-dev',     steps: 50, guidance: 5.0, num_outputs: 1 },
 };
 
 const upload = multer({
@@ -108,7 +124,12 @@ async function preparePrompt(prompt, style) {
 // 檢查並扣除點數的 middleware
 function checkCredits(type) {
   return (req, res, next) => {
-    const cost = CREDIT_COST[type] || 1;
+    let cost = CREDIT_COST[type] || 1;
+    // 圖片生成支援品質等級
+    if (type === 'text-to-image' || type === 'image-to-image') {
+      const quality = req.body.quality || 'standard';
+      cost = QUALITY_COST[quality] || 1;
+    }
     const user = db.get('users').find({ id: req.user.id }).value();
     if (!user || (user.credits || 0) < cost) {
       return res.status(402).json({
@@ -124,7 +145,10 @@ function checkCredits(type) {
 
 // 文字生成圖片
 router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), async (req, res) => {
-  const { prompt, negative_prompt, model = 'flux-schnell', width = 1024, height = 1024, style = 'none' } = req.body;
+  const { prompt, negative_prompt, width = 1024, height = 1024, style = 'none', quality = 'standard' } = req.body;
+  // 根據品質等級決定模型和參數
+  const qParams = QUALITY_PARAMS[quality] || QUALITY_PARAMS['standard'];
+  const model = qParams.model;
   if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
 
   const id = uuidv4();
