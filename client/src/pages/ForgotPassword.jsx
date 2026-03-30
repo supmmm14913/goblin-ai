@@ -16,12 +16,14 @@ export default function ForgotPassword() {
     setLoading(true)
     setErrorMsg(null)
     try {
-      const res = await axios.post('/auth/forgot-password', { email })
+      const res = await axios.post('/auth/forgot-password', { email }, { timeout: 20000 })
       setDone(true)
       if (res.data.resetUrl) setDevUrl(res.data.resetUrl)
       toast.success(res.data.message)
     } catch (err) {
-      const msg = err.response?.data?.error || '發送失敗，請稍後再試'
+      const msg = err.code === 'ECONNABORTED'
+        ? '請求逾時，請稍後再試'
+        : err.response?.data?.error || '發送失敗，請稍後再試'
       setErrorMsg(msg)
       toast.error(msg)
     } finally { setLoading(false) }
