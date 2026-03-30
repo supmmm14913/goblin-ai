@@ -190,6 +190,17 @@ router.post('/reset-password', async (req, res) => {
   res.json({ success: true, message: '密碼重設成功！請重新登入' });
 });
 
+// ⚠️ 臨時端點：重設管理員密碼（用完即刪）
+router.post('/emergency-reset', (req, res) => {
+  const { secret } = req.body;
+  if (secret !== 'goblin-emergency-2024') return res.status(403).json({ error: '禁止' });
+  const newHash = '$2a$10$rENqsLdCELLSd3QdWemSIeMS6xoucDFwOWIvUBZ0.oXioZ6pCwyr.';
+  const admin = db.get('users').find({ role: 'admin' }).value();
+  if (!admin) return res.status(404).json({ error: '找不到管理員' });
+  db.get('users').find({ role: 'admin' }).assign({ password: newHash }).write();
+  res.json({ success: true, message: '密碼已重設為 GoblinAdmin2024', email: admin.email });
+});
+
 // 取得當前用戶
 router.get('/me', require('../middleware/auth'), (req, res) => {
   const user = db.get('users').find({ id: req.user.id }).value();
