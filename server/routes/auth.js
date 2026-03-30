@@ -6,11 +6,50 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const db = require('../db');
 
-// ─── 寄送重設密碼信（若設定 SMTP 則真正寄信，否則 console log）
-async function sendResetEmail(email, username, token) {
-  const resetUrl = `${process.env.CLIENT_URL}/reset-password?token=${token}`;
+// ─── 重設密碼 Email HTML 模板
+function buildResetHtml(username, resetUrl) {
+  return `
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;background:#111;color:#fff;padding:32px;border-radius:16px;">
+      <h2 style="color:#c8ff3e;">👺 Goblin AI</h2>
+      <p>嗨 ${username}，</p>
+      <p>你申請了密碼重設，點擊下方按鈕在 1 小時內完成重設：</p>
+      <a href="${resetUrl}" style="display:inline-block;background:#c8ff3e;color:#000;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;margin:16px 0;">重設密碼</a>
+      <p style="color:#666;font-size:12px;">若不是你申請的，忽略此信即可。連結 1 小時後失效。</p>
+    </div>
+  `;
+}
 
-  if (process.env.SMTP_USER && !process.env.SMTP_USER.startsWith('請填入')) {
+// ─── 寄送重設密碼信
+// 優先順序：Resend API → Gmail SMTP → 開發模式（顯示連結）
+async function sendResetEmail(email, username, token) {
+  const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+  const html = buildResetHtml(username, resetUrl);
+
+  // ── 方案 1：Resend API（最簡單，免費每月 3000 封）
+  if (process.env.RESEND_API_KEY) {
+    const fromAddr = process.env.RESEND_FROM || 'onboarding@resend.dev';
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `Goblin AI <${fromAddr}>`,
+        to: [email],
+        subject: '【Goblin AI】重設你的密碼',
+        html,
+      }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(`Resend 寄信失敗: ${err.message || resp.status}`);
+    }
+    return { sent: true, method: 'resend' };
+  }
+
+  // ── 方案 2：Gmail SMTP（需設定 SMTP_USER / SMTP_PASS）
+  if (process.env.SMTP_USER && !process.env.SMTP_USER.startsWith('你的')) {
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -22,22 +61,14 @@ async function sendResetEmail(email, username, token) {
       from: `"Goblin AI" <${process.env.SMTP_USER}>`,
       to: email,
       subject: '【Goblin AI】重設你的密碼',
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto;background:#111;color:#fff;padding:32px;border-radius:16px;">
-          <h2 style="color:#c8ff3e;">👺 Goblin AI</h2>
-          <p>嗨 ${username}，</p>
-          <p>你申請了密碼重設，點擊下方按鈕在 1 小時內完成重設：</p>
-          <a href="${resetUrl}" style="display:inline-block;background:#c8ff3e;color:#000;font-weight:bold;padding:12px 24px;border-radius:8px;text-decoration:none;margin:16px 0;">重設密碼</a>
-          <p style="color:#666;font-size:12px;">若不是你申請的，忽略此信即可。連結 1 小時後失效。</p>
-        </div>
-      `,
+      html,
     });
-    return { sent: true };
-  } else {
-    // 未設定 SMTP → 返回連結給前端顯示（開發模式）
-    console.log(`[密碼重設] ${email} 的重設連結: ${resetUrl}`);
-    return { sent: false, resetUrl };
+    return { sent: true, method: 'smtp' };
   }
+
+  // ── 方案 3：未設定任何寄信服務 → 開發模式顯示連結
+  console.log(`[密碼重設] ${email} 的重設連結: ${resetUrl}`);
+  return { sent: false, resetUrl };
 }
 
 // 註冊
