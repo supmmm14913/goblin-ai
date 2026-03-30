@@ -3,22 +3,27 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
-import { Mail, Lock } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react'
 
 export default function Login() {
   const { login } = useAuth()
   const [form, setForm] = useState({ email: '', password: '' })
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [errorMsg, setErrorMsg] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+    setErrorMsg(null)
     try {
       const res = await axios.post('/auth/login', form)
       login(res.data.token, res.data.user)
       toast.success('歡迎回來！')
     } catch (err) {
-      toast.error(err.response?.data?.error || '登入失敗')
+      const msg = err.response?.data?.error || '登入失敗'
+      setErrorMsg(msg)
+      toast.error(msg)
     } finally { setLoading(false) }
   }
 
@@ -40,7 +45,7 @@ export default function Login() {
               <div className="relative">
                 <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20" />
                 <input type="email" className="input-field pl-9" placeholder="you@example.com"
-                  value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} required />
+                  value={form.email} onChange={e => { setForm({ ...form, email: e.target.value }); setErrorMsg(null) }} required />
               </div>
             </div>
             <div>
@@ -52,10 +57,22 @@ export default function Login() {
               </div>
               <div className="relative">
                 <Lock size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20" />
-                <input type="password" className="input-field pl-9" placeholder="••••••••"
-                  value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} required />
+                <input type={showPassword ? 'text' : 'password'} className="input-field pl-9 pr-10" placeholder="••••••••"
+                  value={form.password} onChange={e => { setForm({ ...form, password: e.target.value }); setErrorMsg(null) }} required />
+                <button type="button" onClick={() => setShowPassword(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/70 transition-colors">
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
             </div>
+
+            {errorMsg && (
+              <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                <AlertCircle size={15} className="text-red-400 flex-shrink-0" />
+                <p className="text-red-300 text-xs">{errorMsg}</p>
+              </div>
+            )}
+
             <button type="submit" className="btn-neon w-full py-3 mt-1" disabled={loading}>
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

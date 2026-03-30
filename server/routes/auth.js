@@ -114,10 +114,12 @@ router.post('/login', async (req, res) => {
 
   try {
     const user = db.get('users').find({ email }).value();
-    if (!user) return res.status(400).json({ error: '信箱或密碼錯誤' });
+    if (!user) return res.status(400).json({ error: '此信箱尚未註冊' });
 
-    const valid = await bcrypt.compare(password, user.password);
-    if (!valid) return res.status(400).json({ error: '信箱或密碼錯誤' });
+    // 大小寫不敏感：先試原始密碼，再試小寫
+    const valid = await bcrypt.compare(password, user.password)
+      || await bcrypt.compare(password.toLowerCase(), user.password);
+    if (!valid) return res.status(400).json({ error: '密碼錯誤，請確認後再試' });
 
     const token = jwt.sign(
       { id: user.id, username: user.username, email: user.email },
