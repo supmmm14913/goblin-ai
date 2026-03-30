@@ -10,6 +10,7 @@ import Landing from './pages/Landing'
 import Pricing from './pages/Pricing'
 import PaymentSuccess from './pages/PaymentSuccess'
 import Admin from './pages/Admin'
+import Settings from './pages/Settings'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 
@@ -74,6 +75,7 @@ export default function App() {
           {/* 需要登入 */}
           <Route path="/generate" element={<PrivateRoute><AppLayout fullWidth><Generate /></AppLayout></PrivateRoute>} />
           <Route path="/history" element={<PrivateRoute><AppLayout><History /></AppLayout></PrivateRoute>} />
+          <Route path="/settings" element={<PrivateRoute><AppLayout><Settings /></AppLayout></PrivateRoute>} />
 
           {/* 管理後台 */}
           <Route path="/admin" element={<AdminRoute><AppLayout><Admin /></AppLayout></AdminRoute>} />

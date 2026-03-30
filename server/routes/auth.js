@@ -78,9 +78,15 @@ async function sendResetEmail(email, username, token) {
   return { sent: false, resetUrl };
 }
 
+// 產生推薦碼
+function genReferralCode(username) {
+  const base = username.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'user';
+  return base + Math.random().toString(36).slice(2, 6);
+}
+
 // 註冊
 router.post('/register', async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, referralCode } = req.body;
   if (!username || !email || !password) return res.status(400).json({ error: '請填寫所有欄位' });
   if (password.length < 6) return res.status(400).json({ error: '密碼至少需要 6 個字元' });
 
@@ -89,19 +95,34 @@ router.post('/register', async (req, res) => {
     const existingUsername = db.get('users').find({ username }).value();
     if (existingEmail || existingUsername) return res.status(400).json({ error: '用戶名或信箱已被使用' });
 
+    // 驗證推薦碼
+    let referrer = null;
+    if (referralCode) {
+      referrer = db.get('users').find({ referral_code: referralCode.trim() }).value();
+    }
+
     const hashed = await bcrypt.hash(password, 10);
     const id = uuidv4();
     const isFirstUser = db.get('users').size().value() === 0;
+    const credits = referrer ? 30 : 10;
+    const myReferralCode = genReferralCode(username);
     const newUser = {
       id, username, email, password: hashed,
-      credits: 10,
+      credits,
+      referral_code: myReferralCode,
+      referred_by: referrer ? referrer.id : null,
       role: isFirstUser ? 'admin' : 'user',
       created_at: new Date().toISOString()
     };
     db.get('users').push(newUser).write();
 
+    // 推薦人也獲得 30 點
+    if (referrer) {
+      db.get('users').find({ id: referrer.id }).assign({ credits: (referrer.credits || 0) + 30 }).write();
+    }
+
     const token = jwt.sign({ id, username, email }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token, user: { id, username, email, credits: newUser.credits, role: newUser.role } });
+    res.json({ token, user: { id, username, email, credits, role: newUser.role }, referralBonus: !!referrer });
   } catch {
     res.status(500).json({ error: '伺服器錯誤' });
   }
@@ -211,7 +232,42 @@ router.post('/emergency-reset', (req, res) => {
 router.get('/me', require('../middleware/auth'), (req, res) => {
   const user = db.get('users').find({ id: req.user.id }).value();
   if (!user) return res.status(404).json({ error: '用戶不存在' });
-  res.json({ user: { id: user.id, username: user.username, email: user.email, credits: user.credits, role: user.role } });
+  // 計算推薦人數
+  const referralCount = db.get('users').filter({ referred_by: user.id }).size().value();
+  res.json({ user: { id: user.id, username: user.username, email: user.email, credits: user.credits, role: user.role, referral_code: user.referral_code, referralCount, created_at: user.created_at } });
+});
+
+// 修改密碼
+router.patch('/change-password', require('../middleware/auth'), async (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: '請填寫所有欄位' });
+  if (newPassword.length < 6) return res.status(400).json({ error: '新密碼至少需要 6 個字元' });
+
+  const user = db.get('users').find({ id: req.user.id }).value();
+  const valid = await bcrypt.compare(currentPassword, user.password)
+    || await bcrypt.compare(currentPassword.toLowerCase(), user.password);
+  if (!valid) return res.status(400).json({ error: '目前密碼錯誤' });
+
+  const hashed = await bcrypt.hash(newPassword, 10);
+  db.get('users').find({ id: req.user.id }).assign({ password: hashed }).write();
+  res.json({ success: true, message: '密碼已更新' });
+});
+
+// 修改信箱
+router.patch('/change-email', require('../middleware/auth'), async (req, res) => {
+  const { newEmail, password } = req.body;
+  if (!newEmail || !password) return res.status(400).json({ error: '請填寫所有欄位' });
+
+  const existing = db.get('users').find({ email: newEmail }).value();
+  if (existing) return res.status(400).json({ error: '此信箱已被使用' });
+
+  const user = db.get('users').find({ id: req.user.id }).value();
+  const valid = await bcrypt.compare(password, user.password)
+    || await bcrypt.compare(password.toLowerCase(), user.password);
+  if (!valid) return res.status(400).json({ error: '密碼錯誤' });
+
+  db.get('users').find({ id: req.user.id }).assign({ email: newEmail }).write();
+  res.json({ success: true, message: '信箱已更新' });
 });
 
 module.exports = router;
