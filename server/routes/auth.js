@@ -150,7 +150,21 @@ router.post('/forgot-password', async (req, res) => {
     }
   } catch (err) {
     console.error('寄信失敗:', err.message);
-    res.status(500).json({ error: '寄信失敗，請稍後再試' });
+    // 根據錯誤類型給出具體原因
+    let errorMsg = '寄信失敗，請稍後再試';
+    const msg = err.message || '';
+    if (msg.includes('not verified') || msg.includes('domain') || msg.includes('testing emails')) {
+      errorMsg = '寄信服務尚未完整設定（寄件網域未驗證），請聯絡管理員';
+    } else if (msg.includes('Invalid API') || msg.includes('Unauthorized') || msg.includes('401')) {
+      errorMsg = '寄信服務金鑰無效，請聯絡管理員';
+    } else if (msg.includes('rate limit') || msg.includes('429')) {
+      errorMsg = '寄信次數已達上限，請稍後再試';
+    } else if (msg.includes('Invalid email') || msg.includes('invalid_to')) {
+      errorMsg = '信箱格式不正確，請確認後再試';
+    } else if (msg.length > 0) {
+      errorMsg = `寄信失敗：${msg}`;
+    }
+    res.status(500).json({ error: errorMsg });
   }
 });
 

@@ -2,25 +2,28 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
-import { Mail, ArrowLeft, CheckCircle } from 'lucide-react'
+import { Mail, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react'
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
   const [devUrl, setDevUrl] = useState(null)
+  const [errorMsg, setErrorMsg] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
+    setErrorMsg(null)
     try {
       const res = await axios.post('/auth/forgot-password', { email })
       setDone(true)
-      // 開發模式下直接顯示連結
       if (res.data.resetUrl) setDevUrl(res.data.resetUrl)
       toast.success(res.data.message)
     } catch (err) {
-      toast.error(err.response?.data?.error || '發送失敗，請稍後再試')
+      const msg = err.response?.data?.error || '發送失敗，請稍後再試'
+      setErrorMsg(msg)
+      toast.error(msg)
     } finally { setLoading(false) }
   }
 
@@ -70,9 +73,18 @@ export default function ForgotPassword() {
                   <div className="relative">
                     <Mail size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/20" />
                     <input type="email" className="input-field pl-9" placeholder="you@example.com"
-                      value={email} onChange={e => setEmail(e.target.value)} required />
+                      value={email} onChange={e => { setEmail(e.target.value); setErrorMsg(null) }} required />
                   </div>
                 </div>
+
+                {/* 錯誤原因顯示區 */}
+                {errorMsg && (
+                  <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3">
+                    <AlertCircle size={15} className="text-red-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-red-300 text-xs leading-relaxed">{errorMsg}</p>
+                  </div>
+                )}
+
                 <button type="submit" className="btn-neon w-full py-3 font-bold" disabled={loading}>
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
