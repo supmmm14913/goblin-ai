@@ -44,10 +44,16 @@ router.get('/stats', authMiddleware, adminOnly, (req, res) => {
 router.get('/users', authMiddleware, adminOnly, (req, res) => {
   const { page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
+  const gens = db.get('generations').value();
+  const spentMap = {};
+  gens.forEach(g => {
+    if (g.credit_cost) spentMap[g.user_id] = (spentMap[g.user_id] || 0) + g.credit_cost;
+  });
+
   const users = db.get('users')
     .orderBy(['created_at'], ['desc'])
     .value()
-    .map(u => ({ id: u.id, username: u.username, email: u.email, credits: u.credits, role: u.role, created_at: u.created_at }));
+    .map(u => ({ id: u.id, username: u.username, email: u.email, credits: u.credits, totalSpent: spentMap[u.id] || 0, role: u.role, created_at: u.created_at }));
 
   res.json({
     users: users.slice(offset, offset + parseInt(limit)),

@@ -144,7 +144,7 @@ export default function Admin() {
             <table className="w-full text-sm">
               <thead className="bg-gray-800">
                 <tr>
-                  {['用戶名', '信箱', '點數', '身份', '加入時間', '操作'].map(h => (
+                  {['會員ID', '用戶名', '信箱', '已花費', '剩餘點數', '身份', '加入時間', '操作'].map(h => (
                     <th key={h} className="text-left px-4 py-3 text-gray-400 font-medium whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -152,8 +152,10 @@ export default function Admin() {
               <tbody className="divide-y divide-gray-800">
                 {users.map(u => (
                   <tr key={u.id} className="hover:bg-gray-800/50">
+                    <td className="px-4 py-3 text-gray-500 text-xs font-mono">{u.id.slice(0, 8)}...</td>
                     <td className="px-4 py-3 font-medium">{u.username}</td>
                     <td className="px-4 py-3 text-gray-400 text-xs">{u.email}</td>
+                    <td className="px-4 py-3 text-red-400 font-bold">{u.totalSpent || 0}</td>
                     <td className="px-4 py-3">
                       {editingUser === u.id ? (
                         <div className="flex items-center gap-1">
@@ -176,6 +178,7 @@ export default function Admin() {
                     </td>
                     <td className="px-4 py-3">
                       <button onClick={() => { setEditingUser(u.id); setEditCredits(u.credits) }}
+                        title="編輯點數"
                         className="text-gray-400 hover:text-indigo-400 transition-colors">
                         <Edit2 size={14} />
                       </button>
