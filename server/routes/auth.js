@@ -50,6 +50,7 @@ async function sendResetEmail(email, username, token) {
 
   // ── 方案 2：Gmail SMTP（需設定 SMTP_USER / SMTP_PASS）
   if (process.env.SMTP_USER && !process.env.SMTP_USER.startsWith('你的')) {
+    console.log(`[SMTP] 嘗試寄信給 ${email}，使用帳號 ${process.env.SMTP_USER}`);
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -59,12 +60,13 @@ async function sendResetEmail(email, username, token) {
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
       tls: { rejectUnauthorized: false },
     });
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"Goblin AI" <${process.env.SMTP_USER}>`,
       to: email,
       subject: '【Goblin AI】重設你的密碼',
       html,
     });
+    console.log(`[SMTP] 寄信成功，messageId: ${info.messageId}`);
     return { sent: true, method: 'smtp' };
   }
 
@@ -131,8 +133,7 @@ router.post('/forgot-password', async (req, res) => {
   if (!email) return res.status(400).json({ error: '請輸入信箱' });
 
   const user = db.get('users').find({ email }).value();
-  // 不管有沒有找到都回 ok（避免枚舉攻擊）
-  if (!user) return res.json({ success: true, message: '若此信箱已註冊，重設連結已送出' });
+  if (!user) return res.status(404).json({ error: '此信箱尚未註冊' });
 
   // 產生 token（1 小時有效）
   const token = crypto.randomBytes(32).toString('hex');
