@@ -4,8 +4,8 @@ const db = require('../db');
 const authMiddleware = require('../middleware/auth');
 
 // 管理員驗證
-function adminOnly(req, res, next) {
-  const user = db.get('users').find({ id: req.user.id }).value();
+async function adminOnly(req, res, next) {
+  const user = await db.findOne('users', { id: req.user.id });
   if (!user || user.role !== 'admin') {
     return res.status(403).json({ error: '需要管理員權限' });
   }
@@ -13,10 +13,10 @@ function adminOnly(req, res, next) {
 }
 
 // 統計數據
-router.get('/stats', authMiddleware, adminOnly, (req, res) => {
-  const users = db.get('users').value();
-  const generations = db.get('generations').value();
-  const orders = db.get('orders').value();
+router.get('/stats', authMiddleware, adminOnly, async (req, res) => {
+  const users = await db.find('users');
+  const generations = await db.find('generations');
+  const orders = await db.find('orders');
 
   const totalRevenue = orders
     .filter(o => o.status === 'paid')
@@ -28,6 +28,9 @@ router.get('/stats', authMiddleware, adminOnly, (req, res) => {
     .filter(o => o.status === 'paid' && o.created_at.startsWith(today))
     .reduce((sum, o) => sum + (o.amount || 0), 0) / 100;
 
+  const imageGens = await db.filter('generations', g => g.type.includes('image'));
+  const videoGens = await db.filter('generations', g => g.type.includes('video'));
+
   res.json({
     totalUsers: users.length,
     totalGenerations: generations.length,
@@ -35,25 +38,23 @@ router.get('/stats', authMiddleware, adminOnly, (req, res) => {
     totalRevenue,
     todayGenerations: todayGens,
     todayRevenue,
-    imageGenerations: generations.filter(g => g.type.includes('image')).length,
-    videoGenerations: generations.filter(g => g.type.includes('video')).length,
+    imageGenerations: imageGens.length,
+    videoGenerations: videoGens.length,
   });
 });
 
 // 用戶列表
-router.get('/users', authMiddleware, adminOnly, (req, res) => {
+router.get('/users', authMiddleware, adminOnly, async (req, res) => {
   const { page = 1, limit = 20 } = req.query;
   const offset = (parseInt(page) - 1) * parseInt(limit);
-  const gens = db.get('generations').value();
+  const gens = await db.find('generations');
   const spentMap = {};
   gens.forEach(g => {
     if (g.credit_cost) spentMap[g.user_id] = (spentMap[g.user_id] || 0) + g.credit_cost;
   });
 
-  const users = db.get('users')
-    .orderBy(['created_at'], ['desc'])
-    .value()
-    .map(u => ({ id: u.id, username: u.username, email: u.email, credits: u.credits, totalSpent: spentMap[u.id] || 0, role: u.role, created_at: u.created_at }));
+  const allUsers = await db.findSorted('users', {}, 'created_at', -1);
+  const users = allUsers.map(u => ({ id: u.id, username: u.username, email: u.email, credits: u.credits, totalSpent: spentMap[u.id] || 0, role: u.role, created_at: u.created_at }));
 
   res.json({
     users: users.slice(offset, offset + parseInt(limit)),
@@ -62,21 +63,21 @@ router.get('/users', authMiddleware, adminOnly, (req, res) => {
 });
 
 // 手動調整用戶點數
-router.patch('/users/:id/credits', authMiddleware, adminOnly, (req, res) => {
+router.patch('/users/:id/credits', authMiddleware, adminOnly, async (req, res) => {
   const { credits } = req.body;
-  const user = db.get('users').find({ id: req.params.id }).value();
+  const user = await db.findOne('users', { id: req.params.id });
   if (!user) return res.status(404).json({ error: '用戶不存在' });
-  db.get('users').find({ id: req.params.id }).assign({ credits: parseInt(credits) }).write();
+  await db.updateOne('users', { id: req.params.id }, { credits: parseInt(credits) });
   res.json({ success: true, credits: parseInt(credits) });
 });
 
 // 訂單列表
-router.get('/orders', authMiddleware, adminOnly, (req, res) => {
-  const orders = db.get('orders').orderBy(['created_at'], ['desc']).value();
-  const enriched = orders.map(o => {
-    const user = db.get('users').find({ id: o.user_id }).value();
+router.get('/orders', authMiddleware, adminOnly, async (req, res) => {
+  const orders = await db.findSorted('orders', {}, 'created_at', -1);
+  const enriched = await Promise.all(orders.map(async o => {
+    const user = await db.findOne('users', { id: o.user_id });
     return { ...o, username: user?.username, email: user?.email };
-  });
+  }));
   res.json({ orders: enriched });
 });
 

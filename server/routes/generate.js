@@ -123,14 +123,14 @@ async function preparePrompt(prompt, style) {
 
 // 檢查並扣除點數的 middleware
 function checkCredits(type) {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     let cost = CREDIT_COST[type] || 1;
     // 圖片生成支援品質等級
     if (type === 'text-to-image' || type === 'image-to-image') {
       const quality = req.body.quality || 'standard';
       cost = QUALITY_COST[quality] || 1;
     }
-    const user = db.get('users').find({ id: req.user.id }).value();
+    const user = await db.findOne('users', { id: req.user.id });
     if (!user || (user.credits || 0) < cost) {
       return res.status(402).json({
         error: `點數不足！此操作需要 ${cost} 點，你目前有 ${user?.credits || 0} 點`,
@@ -152,17 +152,17 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
   if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
 
   const id = uuidv4();
-  db.get('generations').push({
+  await db.insertOne('generations', {
     id, user_id: req.user.id, type: 'text-to-image',
     prompt, negative_prompt: negative_prompt || null, model,
     width, height, image_url: null, status: 'processing',
     credit_cost: req.creditCost,
     created_at: new Date().toISOString()
-  }).write();
+  });
 
   // 扣點
-  const user = db.get('users').find({ id: req.user.id }).value();
-  db.get('users').find({ id: req.user.id }).assign({ credits: user.credits - req.creditCost }).write();
+  const user = await db.findOne('users', { id: req.user.id });
+  await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
 
   try {
     const finalPrompt = await preparePrompt(prompt, style);
@@ -180,19 +180,19 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
     }
 
     // 更新記錄儲存翻譯後的提示詞
-    db.get('generations').find({ id }).assign({ prompt_en: finalPrompt }).write();
+    await db.updateOne('generations', { id }, { prompt_en: finalPrompt });
 
     const output = await replicate.run(modelId, { input });
     const imageUrl = Array.isArray(output) ? output[0] : String(output);
 
-    db.get('generations').find({ id }).assign({ image_url: imageUrl, status: 'completed' }).write();
-    const updatedUser = db.get('users').find({ id: req.user.id }).value();
+    await db.updateOne('generations', { id }, { image_url: imageUrl, status: 'completed' });
+    const updatedUser = await db.findOne('users', { id: req.user.id });
     res.json({ id, image_url: imageUrl, status: 'completed', credits: updatedUser.credits });
   } catch (err) {
     // 生成失敗退還點數
-    const u = db.get('users').find({ id: req.user.id }).value();
-    db.get('users').find({ id: req.user.id }).assign({ credits: u.credits + req.creditCost }).write();
-    db.get('generations').find({ id }).assign({ status: 'failed' }).write();
+    const u = await db.findOne('users', { id: req.user.id });
+    await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
+    await db.updateOne('generations', { id }, { status: 'failed' });
     console.error('生成錯誤:', err.message);
     let userMsg = '圖片生成失敗';
     if (err.message.includes('402') || err.message.includes('Insufficient credit')) {
@@ -211,14 +211,14 @@ router.post('/image-to-image', authMiddleware, checkCredits('image-to-image'), u
   if (!req.file) return res.status(400).json({ error: '請上傳圖片' });
 
   const id = uuidv4();
-  db.get('generations').push({
+  await db.insertOne('generations', {
     id, user_id: req.user.id, type: 'image-to-image',
     prompt, model: 'sdxl', image_url: null, status: 'processing',
     credit_cost: req.creditCost, created_at: new Date().toISOString()
-  }).write();
+  });
 
-  const user = db.get('users').find({ id: req.user.id }).value();
-  db.get('users').find({ id: req.user.id }).assign({ credits: user.credits - req.creditCost }).write();
+  const user = await db.findOne('users', { id: req.user.id });
+  await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
 
   try {
     const finalPrompt = await preparePrompt(prompt);
@@ -233,14 +233,14 @@ router.post('/image-to-image', authMiddleware, checkCredits('image-to-image'), u
 
     fs.unlinkSync(req.file.path);
     const imageUrl = Array.isArray(output) ? output[0] : String(output);
-    db.get('generations').find({ id }).assign({ image_url: imageUrl, status: 'completed' }).write();
-    const updatedUser = db.get('users').find({ id: req.user.id }).value();
+    await db.updateOne('generations', { id }, { image_url: imageUrl, status: 'completed' });
+    const updatedUser = await db.findOne('users', { id: req.user.id });
     res.json({ id, image_url: imageUrl, status: 'completed', credits: updatedUser.credits });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    const u = db.get('users').find({ id: req.user.id }).value();
-    db.get('users').find({ id: req.user.id }).assign({ credits: u.credits + req.creditCost }).write();
-    db.get('generations').find({ id }).assign({ status: 'failed' }).write();
+    const u = await db.findOne('users', { id: req.user.id });
+    await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
+    await db.updateOne('generations', { id }, { status: 'failed' });
     res.status(500).json({ error: '圖片生成失敗: ' + err.message });
   }
 });
@@ -279,12 +279,13 @@ router.get('/job/:predictionId', authMiddleware, async (req, res) => {
   const { predictionId } = req.params;
 
   // 找到對應的 generation 記錄
-  const gen = db.get('generations').find({ prediction_id: predictionId, user_id: req.user.id }).value();
+  const gen = await db.findOne('generations', { prediction_id: predictionId, user_id: req.user.id });
   if (!gen) return res.status(404).json({ error: '找不到任務' });
 
   // 若已完成，直接回傳
   if (gen.status === 'completed' || gen.status === 'failed') {
-    return res.json({ status: gen.status, video_url: gen.video_url, credits: db.get('users').find({ id: req.user.id }).value()?.credits });
+    const currentUser = await db.findOne('users', { id: req.user.id });
+    return res.json({ status: gen.status, video_url: gen.video_url, credits: currentUser?.credits });
   }
 
   // 向 Replicate 查詢最新狀態
@@ -295,17 +296,18 @@ router.get('/job/:predictionId', authMiddleware, async (req, res) => {
 
     if (result.status === 'succeeded') {
       const videoUrl = Array.isArray(result.output) ? result.output[0] : String(result.output);
-      db.get('generations').find({ prediction_id: predictionId }).assign({ video_url: videoUrl, status: 'completed' }).write();
-      return res.json({ status: 'completed', video_url: videoUrl, credits: db.get('users').find({ id: req.user.id }).value()?.credits });
+      await db.updateOne('generations', { prediction_id: predictionId }, { video_url: videoUrl, status: 'completed' });
+      const currentUser = await db.findOne('users', { id: req.user.id });
+      return res.json({ status: 'completed', video_url: videoUrl, credits: currentUser?.credits });
     }
 
     if (result.status === 'failed' || result.status === 'canceled') {
       // 退還點數
-      const genRecord = db.get('generations').find({ prediction_id: predictionId }).value();
+      const genRecord = await db.findOne('generations', { prediction_id: predictionId });
       if (genRecord && genRecord.status !== 'failed') {
-        const u = db.get('users').find({ id: req.user.id }).value();
-        db.get('users').find({ id: req.user.id }).assign({ credits: u.credits + (genRecord.credit_cost || 5) }).write();
-        db.get('generations').find({ prediction_id: predictionId }).assign({ status: 'failed' }).write();
+        const u = await db.findOne('users', { id: req.user.id });
+        await db.updateOne('users', { id: req.user.id }, { credits: u.credits + (genRecord.credit_cost || 5) });
+        await db.updateOne('generations', { prediction_id: predictionId }, { status: 'failed' });
       }
       return res.json({ status: 'failed', error: result.error || '生成失敗' });
     }
@@ -323,8 +325,8 @@ router.post('/text-to-video', authMiddleware, checkCredits('text-to-video'), asy
   if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
 
   const id = uuidv4();
-  const user = db.get('users').find({ id: req.user.id }).value();
-  db.get('users').find({ id: req.user.id }).assign({ credits: user.credits - req.creditCost }).write();
+  const user = await db.findOne('users', { id: req.user.id });
+  await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
 
   try {
     const finalPrompt = await preparePrompt(prompt);
@@ -336,19 +338,19 @@ router.post('/text-to-video', authMiddleware, checkCredits('text-to-video'), asy
       process.env.REPLICATE_API_TOKEN
     );
 
-    db.get('generations').push({
+    await db.insertOne('generations', {
       id, user_id: req.user.id, type: 'text-to-video',
       prompt, prompt_en: finalPrompt, model: 'wan-t2v',
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
       credit_cost: req.creditCost, created_at: new Date().toISOString()
-    }).write();
+    });
 
     // 立即回傳 jobId，前端輪詢
     res.json({ id, prediction_id: prediction.id, status: 'processing' });
   } catch (err) {
-    const u = db.get('users').find({ id: req.user.id }).value();
-    db.get('users').find({ id: req.user.id }).assign({ credits: u.credits + req.creditCost }).write();
+    const u = await db.findOne('users', { id: req.user.id });
+    await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
     console.error('影片提交失敗:', err.message);
     res.status(500).json({ error: '影片任務提交失敗: ' + err.message });
   }
@@ -360,8 +362,8 @@ router.post('/image-to-video', authMiddleware, checkCredits('image-to-video'), u
   if (!req.file) return res.status(400).json({ error: '請上傳圖片' });
 
   const id = uuidv4();
-  const user = db.get('users').find({ id: req.user.id }).value();
-  db.get('users').find({ id: req.user.id }).assign({ credits: user.credits - req.creditCost }).write();
+  const user = await db.findOne('users', { id: req.user.id });
+  await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
 
   try {
     const imageData = fs.readFileSync(req.file.path);
@@ -377,19 +379,19 @@ router.post('/image-to-video', authMiddleware, checkCredits('image-to-video'), u
       process.env.REPLICATE_API_TOKEN
     );
 
-    db.get('generations').push({
+    await db.insertOne('generations', {
       id, user_id: req.user.id, type: 'image-to-video',
       prompt, model: 'wan-i2v',
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
       credit_cost: req.creditCost, created_at: new Date().toISOString()
-    }).write();
+    });
 
     res.json({ id, prediction_id: prediction.id, status: 'processing' });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    const u = db.get('users').find({ id: req.user.id }).value();
-    db.get('users').find({ id: req.user.id }).assign({ credits: u.credits + req.creditCost }).write();
+    const u = await db.findOne('users', { id: req.user.id });
+    await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
     console.error('影片提交失敗:', err.message);
     res.status(500).json({ error: '影片任務提交失敗: ' + err.message });
   }

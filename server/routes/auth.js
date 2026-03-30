@@ -91,19 +91,20 @@ router.post('/register', async (req, res) => {
   if (password.length < 6) return res.status(400).json({ error: '密碼至少需要 6 個字元' });
 
   try {
-    const existingEmail    = db.get('users').find({ email }).value();
-    const existingUsername = db.get('users').find({ username }).value();
+    const existingEmail    = await db.findOne('users', { email });
+    const existingUsername = await db.findOne('users', { username });
     if (existingEmail || existingUsername) return res.status(400).json({ error: '用戶名或信箱已被使用' });
 
     // 驗證推薦碼
     let referrer = null;
     if (referralCode) {
-      referrer = db.get('users').find({ referral_code: referralCode.trim() }).value();
+      referrer = await db.findOne('users', { referral_code: referralCode.trim() });
     }
 
     const hashed = await bcrypt.hash(password, 10);
     const id = uuidv4();
-    const isFirstUser = db.get('users').size().value() === 0;
+    const userCount = await db.count('users');
+    const isFirstUser = userCount === 0;
     const credits = referrer ? 30 : 10;
     const myReferralCode = genReferralCode(username);
     const newUser = {
@@ -114,11 +115,11 @@ router.post('/register', async (req, res) => {
       role: isFirstUser ? 'admin' : 'user',
       created_at: new Date().toISOString()
     };
-    db.get('users').push(newUser).write();
+    await db.insertOne('users', newUser);
 
     // 推薦人也獲得 30 點
     if (referrer) {
-      db.get('users').find({ id: referrer.id }).assign({ credits: (referrer.credits || 0) + 30 }).write();
+      await db.updateOne('users', { id: referrer.id }, { credits: (referrer.credits || 0) + 30 });
     }
 
     const token = jwt.sign({ id, username, email }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -134,7 +135,7 @@ router.post('/login', async (req, res) => {
   if (!email || !password) return res.status(400).json({ error: '請填寫所有欄位' });
 
   try {
-    const user = db.get('users').find({ email }).value();
+    const user = await db.findOne('users', { email });
     if (!user) return res.status(400).json({ error: '此信箱尚未註冊' });
 
     // 大小寫不敏感：先試原始密碼，再試小寫
@@ -158,16 +159,16 @@ router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: '請輸入信箱' });
 
-  const user = db.get('users').find({ email }).value();
+  const user = await db.findOne('users', { email });
   if (!user) return res.status(404).json({ error: '此信箱尚未註冊' });
 
   // 產生 token（1 小時有效）
   const token = crypto.randomBytes(32).toString('hex');
   const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  db.get('users').find({ email }).assign({
+  await db.updateOne('users', { email }, {
     reset_token: token,
     reset_expires: expires
-  }).write();
+  });
 
   try {
     const result = await sendResetEmail(email, user.username, token);
@@ -203,37 +204,37 @@ router.post('/reset-password', async (req, res) => {
   if (!token || !password) return res.status(400).json({ error: '缺少必要參數' });
   if (password.length < 6) return res.status(400).json({ error: '密碼至少需要 6 個字元' });
 
-  const user = db.get('users').find({ reset_token: token }).value();
+  const user = await db.findOne('users', { reset_token: token });
   if (!user) return res.status(400).json({ error: '重設連結無效或已使用' });
   if (new Date(user.reset_expires) < new Date()) return res.status(400).json({ error: '重設連結已過期，請重新申請' });
 
   const hashed = await bcrypt.hash(password, 10);
-  db.get('users').find({ reset_token: token }).assign({
+  await db.updateOne('users', { reset_token: token }, {
     password: hashed,
     reset_token: null,
     reset_expires: null
-  }).write();
+  });
 
   res.json({ success: true, message: '密碼重設成功！請重新登入' });
 });
 
 // ⚠️ 臨時端點：重設管理員密碼（用完即刪）
-router.post('/emergency-reset', (req, res) => {
+router.post('/emergency-reset', async (req, res) => {
   const { secret } = req.body;
   if (secret !== 'goblin-emergency-2024') return res.status(403).json({ error: '禁止' });
   const newHash = '$2a$10$rENqsLdCELLSd3QdWemSIeMS6xoucDFwOWIvUBZ0.oXioZ6pCwyr.';
-  const admin = db.get('users').find({ role: 'admin' }).value();
+  const admin = await db.findOne('users', { role: 'admin' });
   if (!admin) return res.status(404).json({ error: '找不到管理員' });
-  db.get('users').find({ role: 'admin' }).assign({ password: newHash }).write();
+  await db.updateOne('users', { role: 'admin' }, { password: newHash });
   res.json({ success: true, message: '密碼已重設為 GoblinAdmin2024', email: admin.email });
 });
 
 // 取得當前用戶
-router.get('/me', require('../middleware/auth'), (req, res) => {
-  const user = db.get('users').find({ id: req.user.id }).value();
+router.get('/me', require('../middleware/auth'), async (req, res) => {
+  const user = await db.findOne('users', { id: req.user.id });
   if (!user) return res.status(404).json({ error: '用戶不存在' });
   // 計算推薦人數
-  const referralCount = db.get('users').filter({ referred_by: user.id }).size().value();
+  const referralCount = await db.count('users', { referred_by: user.id });
   res.json({ user: { id: user.id, username: user.username, email: user.email, credits: user.credits, role: user.role, referral_code: user.referral_code, referralCount, created_at: user.created_at } });
 });
 
@@ -243,13 +244,13 @@ router.patch('/change-password', require('../middleware/auth'), async (req, res)
   if (!currentPassword || !newPassword) return res.status(400).json({ error: '請填寫所有欄位' });
   if (newPassword.length < 6) return res.status(400).json({ error: '新密碼至少需要 6 個字元' });
 
-  const user = db.get('users').find({ id: req.user.id }).value();
+  const user = await db.findOne('users', { id: req.user.id });
   const valid = await bcrypt.compare(currentPassword, user.password)
     || await bcrypt.compare(currentPassword.toLowerCase(), user.password);
   if (!valid) return res.status(400).json({ error: '目前密碼錯誤' });
 
   const hashed = await bcrypt.hash(newPassword, 10);
-  db.get('users').find({ id: req.user.id }).assign({ password: hashed }).write();
+  await db.updateOne('users', { id: req.user.id }, { password: hashed });
   res.json({ success: true, message: '密碼已更新' });
 });
 
@@ -258,15 +259,15 @@ router.patch('/change-email', require('../middleware/auth'), async (req, res) =>
   const { newEmail, password } = req.body;
   if (!newEmail || !password) return res.status(400).json({ error: '請填寫所有欄位' });
 
-  const existing = db.get('users').find({ email: newEmail }).value();
+  const existing = await db.findOne('users', { email: newEmail });
   if (existing) return res.status(400).json({ error: '此信箱已被使用' });
 
-  const user = db.get('users').find({ id: req.user.id }).value();
+  const user = await db.findOne('users', { id: req.user.id });
   const valid = await bcrypt.compare(password, user.password)
     || await bcrypt.compare(password.toLowerCase(), user.password);
   if (!valid) return res.status(400).json({ error: '密碼錯誤' });
 
-  db.get('users').find({ id: req.user.id }).assign({ email: newEmail }).write();
+  await db.updateOne('users', { id: req.user.id }, { email: newEmail });
   res.json({ success: true, message: '信箱已更新' });
 });
 

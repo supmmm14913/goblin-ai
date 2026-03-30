@@ -17,8 +17,8 @@ router.get('/plans', (req, res) => {
 });
 
 // 取得用戶點數
-router.get('/credits', authMiddleware, (req, res) => {
-  const user = db.get('users').find({ id: req.user.id }).value();
+router.get('/credits', authMiddleware, async (req, res) => {
+  const user = await db.findOne('users', { id: req.user.id });
   if (!user) return res.status(404).json({ error: '用戶不存在' });
   res.json({ credits: user.credits });
 });
@@ -95,18 +95,18 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       const { userId, credits } = customData;
       if (!userId || !credits) return res.sendStatus(200);
 
-      const user = db.get('users').find({ id: userId }).value();
+      const user = await db.findOne('users', { id: userId });
       if (user) {
         const newCredits = (user.credits || 0) + parseInt(credits);
-        db.get('users').find({ id: userId }).assign({ credits: newCredits }).write();
-        db.get('orders').push({
+        await db.updateOne('users', { id: userId }, { credits: newCredits });
+        await db.insertOne('orders', {
           id: uuidv4(), user_id: userId,
           transaction_id: event.data.id,
           credits: parseInt(credits),
           amount: event.data.details?.totals?.total,
           status: 'paid',
           created_at: new Date().toISOString()
-        }).write();
+        });
         console.log(`✅ 用戶 ${userId} 已加入 ${credits} 點數`);
       }
     }
@@ -119,23 +119,23 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
 
 // ─── 管理員手動給點（用戶付款後手動核發）──────────────────────
 router.post('/manual-grant', authMiddleware, async (req, res) => {
-  const admin = db.get('users').find({ id: req.user.id }).value();
+  const admin = await db.findOne('users', { id: req.user.id });
   if (!admin || admin.role !== 'admin') return res.status(403).json({ error: '需要管理員權限' });
 
   const { targetEmail, credits, note } = req.body;
-  const target = db.get('users').find({ email: targetEmail }).value();
+  const target = await db.findOne('users', { email: targetEmail });
   if (!target) return res.status(404).json({ error: '找不到該用戶' });
 
   const newCredits = (target.credits || 0) + parseInt(credits);
-  db.get('users').find({ email: targetEmail }).assign({ credits: newCredits }).write();
-  db.get('orders').push({
+  await db.updateOne('users', { email: targetEmail }, { credits: newCredits });
+  await db.insertOne('orders', {
     id: uuidv4(), user_id: target.id,
     transaction_id: `manual_${Date.now()}`,
     credits: parseInt(credits),
     amount: 0, status: 'manual',
     note: note || '管理員手動發放',
     created_at: new Date().toISOString()
-  }).write();
+  });
 
   res.json({ success: true, credits: newCredits, username: target.username });
 });
