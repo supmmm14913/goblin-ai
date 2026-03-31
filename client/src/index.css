@@ -133,13 +133,45 @@ input[type="range"].credit-slider::-webkit-slider-thumb {
   from { transform: translateX(0); }
   to   { transform: translateX(-50%); }
 }
+@keyframes marquee-right {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
 .marquee-track {
   display: flex;
   width: max-content;
   animation: marquee-left 40s linear infinite;
 }
-.marquee-track:hover { animation-play-state: paused; }
+.marquee-track-right {
+  display: flex;
+  width: max-content;
+  animation: marquee-right 38s linear infinite;
+}
+.marquee-track:hover,
+.marquee-track-right:hover { animation-play-state: paused; }
 .marquee-wrap { overflow: hidden; }
+
+/* Video card marquee rows */
+@keyframes vid-left {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes vid-right {
+  from { transform: translateX(-50%); }
+  to   { transform: translateX(0); }
+}
+.vid-row-left {
+  display: flex;
+  width: max-content;
+  animation: vid-left 60s linear infinite;
+}
+.vid-row-right {
+  display: flex;
+  width: max-content;
+  animation: vid-right 55s linear infinite;
+}
+.vid-row-left:hover,
+.vid-row-right:hover { animation-play-state: paused; }
 
 /* Fade-in-up */
 @keyframes fadeInUp {
