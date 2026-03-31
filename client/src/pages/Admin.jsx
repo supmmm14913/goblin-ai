@@ -34,7 +34,11 @@ export default function Admin() {
     if (!grantForm.email || !grantForm.credits) return toast.error('請填寫 Email 和點數')
     setGrantLoading(true)
     try {
-      const res = await axios.post('/payment/manual-grant', grantForm)
+      const res = await axios.post('/payment/manual-grant', {
+        targetEmail: grantForm.email,
+        credits: grantForm.credits,
+        note: grantForm.note,
+      })
       toast.success(`已為 ${res.data.username} 發放 ${grantForm.credits} 點！`)
       setGrantForm({ email: '', credits: '', note: '' })
       load()
