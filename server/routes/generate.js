@@ -26,10 +26,10 @@ const QUALITY_COST = {
 
 // 品質等級對應模型參數
 const QUALITY_PARAMS = {
-  'standard': { model: 'flux-schnell', steps: 4,  guidance: 3.5 },
-  'fine':     { model: 'flux-dev',     steps: 28, guidance: 3.5 },
-  'ultra':    { model: 'flux-dev',     steps: 50, guidance: 4.5 },
-  'premium':  { model: 'flux-dev',     steps: 50, guidance: 5.0, num_outputs: 1 },
+  'standard': { model: 'flux-schnell',  steps: 4,  guidance: 3.5 },
+  'fine':     { model: 'flux-dev',      steps: 28, guidance: 3.5 },
+  'ultra':    { model: 'flux-dev',      steps: 50, guidance: 4.5 },
+  'premium':  { model: 'flux-1.1-pro',  steps: 28, guidance: 3.5 },
 };
 
 const upload = multer({
@@ -42,8 +42,9 @@ const upload = multer({
 });
 
 const MODELS = {
-  'flux-schnell': 'black-forest-labs/flux-schnell',
-  'flux-dev': 'black-forest-labs/flux-dev',
+  'flux-schnell':  'black-forest-labs/flux-schnell',
+  'flux-dev':      'black-forest-labs/flux-dev',
+  'flux-1.1-pro':  'black-forest-labs/flux-1.1-pro',
   'sdxl': 'stability-ai/sdxl:39ed52f2319f9c07e2c6ce3367fb4cb7203f4cd64a25d6927f7fa2d07fa7fba5',
 };
 
@@ -172,7 +173,7 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
     // 合併負面提示詞
     const styleNeg = STYLE_NEGATIVE[style] || '';
     const fullNeg = [negative_prompt, styleNeg].filter(Boolean).join(', ');
-    if (model === 'flux-schnell' || model === 'flux-dev') {
+    if (model === 'flux-schnell' || model === 'flux-dev' || model === 'flux-1.1-pro') {
       input.aspect_ratio = getAspectRatio(width, height);
     } else {
       input.width = width; input.height = height;
@@ -333,14 +334,14 @@ router.post('/text-to-video', authMiddleware, checkCredits('text-to-video'), asy
 
     // 非同步提交（立即得到 predictionId，不等待結果）
     const prediction = await createModelPrediction(
-      'wavespeedai/wan-2.1-t2v-480p',
-      { prompt: finalPrompt, num_frames: 81, aspect_ratio, fast_mode: 'Balanced' },
+      'kwaivgi/kling-v3-video',
+      { prompt: finalPrompt, duration: 5, aspect_ratio, mode: 'standard' },
       process.env.REPLICATE_API_TOKEN
     );
 
     await db.insertOne('generations', {
       id, user_id: req.user.id, type: 'text-to-video',
-      prompt, prompt_en: finalPrompt, model: 'wan-t2v',
+      prompt, prompt_en: finalPrompt, model: 'kling-v3',
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
       credit_cost: req.creditCost, created_at: new Date().toISOString()
@@ -372,16 +373,16 @@ router.post('/image-to-video', authMiddleware, checkCredits('image-to-video'), u
 
     const finalPrompt = prompt ? await preparePrompt(prompt) : 'smooth camera motion, high quality video';
 
-    // 使用 Wan 2.1 I2V（圖片轉影片，比 SVD 更穩定）
-    const prediction = await createPrediction(
-      'e2870aa4965fd9ddfd87c16a3c8ab952c18e745e63f3f3b123c2dc8b538ad2b5',
-      { image: base64Image, prompt: finalPrompt, fast_mode: 'Balanced', num_frames: 81 },
+    // 使用 Kling 3.0 Omni I2V（圖片轉影片）
+    const prediction = await createModelPrediction(
+      'kwaivgi/kling-v3-omni-video',
+      { start_image: base64Image, prompt: finalPrompt || 'smooth cinematic motion, high quality video', duration: 5, mode: 'standard' },
       process.env.REPLICATE_API_TOKEN
     );
 
     await db.insertOne('generations', {
       id, user_id: req.user.id, type: 'image-to-video',
-      prompt, model: 'wan-i2v',
+      prompt, model: 'kling-v3-omni',
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
       credit_cost: req.creditCost, created_at: new Date().toISOString()

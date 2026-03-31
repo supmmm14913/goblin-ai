@@ -37,8 +37,8 @@ const VIDEO_STYLES = [
 const TABS = [
   { id: 'text-image',  label: '文字→圖片', icon: '🖼️', cost: 1 },
   { id: 'image-image', label: '圖→圖',     icon: '🔄', cost: 1 },
-  { id: 'text-video',  label: '文字→影片', icon: '🎬', cost: 5, badge: 'NEW' },
-  { id: 'image-video', label: '圖→影片',   icon: '✨', cost: 5 },
+  { id: 'text-video',  label: '文字→影片', icon: '🎬', cost: 5, badge: 'Kling 3.0' },
+  { id: 'image-video', label: '圖→影片',   icon: '✨', cost: 5, badge: 'Kling 3.0' },
 ]
 
 // 品質等級（圖片生成專用）
@@ -50,9 +50,10 @@ const QUALITY_LEVELS = [
 ]
 
 const MODELS = [
-  { id: 'flux-schnell', name: 'FLUX Schnell', desc: '最快速 · 推薦', badge: '推薦' },
-  { id: 'flux-dev',     name: 'FLUX Dev',     desc: '高品質' },
-  { id: 'sdxl',         name: 'SDXL',         desc: '通用模型' },
+  { id: 'flux-schnell',  name: 'FLUX Schnell',   desc: '最快速 · 推薦', badge: '推薦' },
+  { id: 'flux-dev',      name: 'FLUX Dev',        desc: '高品質細節' },
+  { id: 'flux-1.1-pro',  name: 'FLUX 1.1 Pro',   desc: '頂級 · 最新', badge: 'NEW' },
+  { id: 'sdxl',          name: 'SDXL',            desc: '通用模型' },
 ]
 
 const SIZES = [
@@ -316,7 +317,7 @@ export default function Generate() {
         {tab === 'text-image' && (
           <div>
             <label className="text-xs text-white/40 mb-2 block">模型</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {MODELS.map(m => (
                 <button key={m.id} onClick={() => setModel(m.id)}
                   className={`relative p-2.5 rounded-xl text-left text-xs border transition-all ${model === m.id ? 'border-[#c8ff3e]/40 bg-[#c8ff3e]/5 text-white' : 'border-white/8 bg-[#111114] text-white/40 hover:border-white/15'}`}>

@@ -19,10 +19,10 @@ const PLANS = [
     models: [
       { name: 'FLUX Schnell', cost: '1 點/張', included: true },
       { name: 'FLUX Dev', cost: '2 點/張', included: true },
-      { name: 'SDXL', cost: '1 點/張', included: true },
       { name: 'FLUX 1.1 Pro', cost: '3 點/張', included: true },
-      { name: 'Kling 影片', cost: '5 點/5s', included: true },
-      { name: 'Wan 影片', cost: '5 點/段', included: true },
+      { name: 'SDXL', cost: '1 點/張', included: true },
+      { name: 'Kling 3.0 影片', cost: '5 點/5s', included: true },
+      { name: 'Kling 3.0 Omni', cost: '5 點/段', included: true },
     ],
   },
   {
@@ -40,10 +40,10 @@ const PLANS = [
     models: [
       { name: 'FLUX Schnell', cost: '1 點/張', included: true },
       { name: 'FLUX Dev', cost: '2 點/張', included: true },
-      { name: 'SDXL', cost: '1 點/張', included: true },
       { name: 'FLUX 1.1 Pro', cost: '3 點/張', included: true },
-      { name: 'Kling 影片', cost: '5 點/5s', included: true },
-      { name: 'Wan 影片', cost: '5 點/段', included: true },
+      { name: 'SDXL', cost: '1 點/張', included: true },
+      { name: 'Kling 3.0 影片', cost: '5 點/5s', included: true },
+      { name: 'Kling 3.0 Omni', cost: '5 點/段', included: true },
     ],
   },
   {
@@ -61,26 +61,24 @@ const PLANS = [
     models: [
       { name: 'FLUX Schnell', cost: '1 點/張', included: true },
       { name: 'FLUX Dev', cost: '2 點/張', included: true },
-      { name: 'SDXL', cost: '1 點/張', included: true },
       { name: 'FLUX 1.1 Pro', cost: '3 點/張', included: true },
-      { name: 'Kling 影片', cost: '5 點/5s', included: true },
-      { name: 'Wan 影片', cost: '5 點/段', included: true },
+      { name: 'SDXL', cost: '1 點/張', included: true },
+      { name: 'Kling 3.0 影片', cost: '5 點/5s', included: true },
+      { name: 'Kling 3.0 Omni', cost: '5 點/段', included: true },
     ],
   },
 ]
 
 const IMAGE_MODELS = [
   { name: 'FLUX Schnell', desc: '最快速圖片生成 · 秒速出圖', cost: '1 點', badge: '推薦', badgeColor: 'bg-[#c8ff3e]/20 text-[#c8ff3e]' },
-  { name: 'FLUX Dev', desc: '高品質細節豐富', cost: '2 點', badge: null },
-  { name: 'FLUX 1.1 Pro', desc: '頂級畫質 · 最細膩', cost: '3 點', badge: '最高畫質', badgeColor: 'bg-purple-500/20 text-purple-400' },
+  { name: 'FLUX Dev', desc: '高品質 · 細節豐富', cost: '2 點', badge: null },
+  { name: 'FLUX 1.1 Pro', desc: '最新旗艦 · 頂級畫質', cost: '3 點', badge: '最新', badgeColor: 'bg-purple-500/20 text-purple-400' },
   { name: 'SDXL', desc: '通用穩定擴散模型', cost: '1 點', badge: null },
-  { name: 'FLUX LoRA', desc: '自訂風格融合', cost: '2 點', badge: '風格定制', badgeColor: 'bg-blue-500/20 text-blue-400' },
 ]
 
 const VIDEO_MODELS = [
-  { name: 'Kling 1.6', desc: '超真實感影片 · 業界頂尖', cost: '5 點/5s', badge: '頂尖', badgeColor: 'bg-[#ff3d8a]/20 text-[#ff3d8a]' },
-  { name: 'Wan 2.1', desc: '高創意影片生成', cost: '5 點/段', badge: null },
-  { name: 'MiniMax Video', desc: '電影級畫面品質', cost: '6 點/段', badge: '電影級', badgeColor: 'bg-amber-500/20 text-amber-400' },
+  { name: 'Kling 3.0', desc: '最新 · 電影級 15 秒影片 · 原生音訊', cost: '5 點/5s', badge: '最新', badgeColor: 'bg-[#ff3d8a]/20 text-[#ff3d8a]' },
+  { name: 'Kling 3.0 Omni', desc: '圖片→影片 · 多模態生成', cost: '5 點/段', badge: 'I2V', badgeColor: 'bg-blue-500/20 text-blue-400' },
 ]
 
 const COMPARE_ROWS = [
@@ -363,8 +361,8 @@ export default function Pricing() {
               { icon: '⚡', label: '標準圖片 (FLUX Schnell)', cost: 1 },
               { icon: '🎨', label: '精細圖片 (FLUX Dev)', cost: 2 },
               { icon: '💎', label: '頂級圖片 (FLUX 1.1 Pro)', cost: 3 },
-              { icon: '🎬', label: '文字生成影片 (Kling)', cost: 5 },
-              { icon: '🔄', label: '圖片生成影片', cost: 5 },
+              { icon: '🎬', label: '文字→影片 (Kling 3.0)', cost: 5 },
+              { icon: '🔄', label: '圖片→影片 (Kling 3.0 Omni)', cost: 5 },
             ].map((item, i) => (
               <div key={i} className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-white/50 text-sm">
