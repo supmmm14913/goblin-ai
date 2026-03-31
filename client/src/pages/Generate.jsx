@@ -35,18 +35,18 @@ const VIDEO_STYLES = [
 ]
 
 const TABS = [
-  { id: 'text-image',  label: '文字→圖片', icon: '🖼️', cost: 1 },
-  { id: 'image-image', label: '圖→圖',     icon: '🔄', cost: 1 },
+  { id: 'text-image',  label: '文字→圖片', icon: '🖼️', cost: 2 },
+  { id: 'image-image', label: '圖→圖',     icon: '🔄', cost: 3 },
   { id: 'text-video',  label: '文字→影片', icon: '🎬', cost: 5, badge: 'Kling 3.0' },
   { id: 'image-video', label: '圖→影片',   icon: '✨', cost: 5, badge: 'Kling 3.0' },
 ]
 
-// 品質等級（圖片生成專用）
+// 品質等級（圖片生成專用，費用統一）
 const QUALITY_LEVELS = [
-  { id: 'standard', label: '標準', desc: '快速生成', cost: 1, emoji: '⚡' },
+  { id: 'standard', label: '標準', desc: '快速生成', cost: 2, emoji: '⚡' },
   { id: 'fine',     label: '精細', desc: '高品質',   cost: 2, emoji: '🎨' },
-  { id: 'ultra',    label: '超精細', desc: '細節豐富', cost: 3, emoji: '✨' },
-  { id: 'premium',  label: '頂級',  desc: '最高畫質', cost: 5, emoji: '💎' },
+  { id: 'ultra',    label: '超精細', desc: '細節豐富', cost: 2, emoji: '✨' },
+  { id: 'premium',  label: '頂級',  desc: '最高畫質', cost: 2, emoji: '💎' },
 ]
 
 const MODELS = [
@@ -137,6 +137,10 @@ export default function Generate() {
     const hasChinese = /[\u4e00-\u9fff]/.test(prompt)
     setLoadingMsg(hasChinese ? '🌐 偵測到中文，正在翻譯...' : isVideo ? '📤 提交影片任務...' : '✨ 生成中...')
 
+    // Optimistic credit deduction
+    const previousCredits = user?.credits ?? 0
+    updateCredits(Math.max(0, previousCredits - actualCost))
+
     try {
       const styleKeywords = currentStyle.keywords
       const styledPrompt = styleKeywords && prompt ? `${prompt} -- style: ${styleKeywords}` : prompt
@@ -207,6 +211,7 @@ export default function Generate() {
         }, 5000)
       }
     } catch (err) {
+      updateCredits(previousCredits) // rollback on failure
       toast.error(err.response?.data?.error || '生成失敗', { duration: 6000 })
       setLoading(false); setLoadingMsg('')
     }

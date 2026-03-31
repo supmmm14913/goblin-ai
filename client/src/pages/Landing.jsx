@@ -151,8 +151,8 @@ export default function Landing() {
           <h3 className="font-bold text-lg mb-6 text-center">點數費用說明</h3>
           <div className="space-y-4">
             {[
-              { label: '文字生成圖片', cost: '1 點', icon: '🖼️' },
-              { label: '圖片轉圖片',   cost: '2 點', icon: '🔄' },
+              { label: '文字生成圖片', cost: '2 點', icon: '🖼️' },
+              { label: '圖片轉圖片',   cost: '3 點', icon: '🔄' },
               { label: '文字生成影片', cost: '5 點', icon: '🎬' },
               { label: '圖片生成影片', cost: '5 點', icon: '✨' },
             ].map((item, i) => (

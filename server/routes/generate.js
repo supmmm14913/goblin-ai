@@ -8,20 +8,12 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../db');
 const authMiddleware = require('../middleware/auth');
 
-// 點數費用（基本費用）
+// 點數費用
 const CREDIT_COST = {
-  'text-to-image': 1,
-  'image-to-image': 1,
+  'text-to-image': 2,
+  'image-to-image': 3,
   'text-to-video': 5,
   'image-to-video': 5,
-};
-
-// 圖片品質等級對應點數消耗
-const QUALITY_COST = {
-  'standard': 1,  // 標準品質
-  'fine':     2,  // 精細品質
-  'ultra':    3,  // 超精細
-  'premium':  5,  // 頂級品質
 };
 
 // 品質等級對應模型參數
@@ -125,12 +117,7 @@ async function preparePrompt(prompt, style) {
 // 檢查並扣除點數的 middleware
 function checkCredits(type) {
   return async (req, res, next) => {
-    let cost = CREDIT_COST[type] || 1;
-    // 圖片生成支援品質等級
-    if (type === 'text-to-image' || type === 'image-to-image') {
-      const quality = req.body.quality || 'standard';
-      cost = QUALITY_COST[quality] || 1;
-    }
+    const cost = CREDIT_COST[type] || 2;
     const user = await db.findOne('users', { id: req.user.id });
     if (!user || (user.credits || 0) < cost) {
       return res.status(402).json({
