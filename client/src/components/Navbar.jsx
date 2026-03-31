@@ -109,6 +109,12 @@ export default function Navbar() {
                           className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors">
                           <Settings size={14} />帳號設定
                         </Link>
+                        {user.role === 'admin' && (
+                          <Link to="/admin" onClick={() => setDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors">
+                            <Shield size={14} />管理後台
+                          </Link>
+                        )}
                       </div>
                       <div className="border-t border-white/5 py-1">
                         <button onClick={() => { logout(); setDropdownOpen(false) }}
