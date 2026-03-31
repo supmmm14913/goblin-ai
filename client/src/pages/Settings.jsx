@@ -3,14 +3,48 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Link, useSearchParams } from 'react-router-dom'
-import { User, Link2, Lock, Mail, Coins, Copy, Check, Eye, EyeOff } from 'lucide-react'
+import { User, Link2, Lock, Mail, Coins, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react'
+
+const PLANS = [
+  {
+    id: 'starter',
+    name: '入門包',
+    price: 5,
+    credits: 50,
+    perCredit: '0.10',
+    border: 'border-white/10',
+    btnClass: 'w-full py-2.5 rounded-xl font-bold text-sm bg-white/10 hover:bg-white/20 text-white transition-all',
+  },
+  {
+    id: 'popular',
+    name: '進階包',
+    badge: '🔥 最受歡迎',
+    price: 12,
+    credits: 150,
+    perCredit: '0.08',
+    border: 'border-[#ff3d8a]/50',
+    btnClass: 'w-full py-2.5 rounded-xl font-bold text-sm bg-[#ff3d8a] hover:bg-[#ff3d8a]/80 text-white transition-all',
+    glow: '0 0 20px rgba(255,61,138,0.15)',
+  },
+  {
+    id: 'pro',
+    name: '菁英包',
+    badge: '⚡ 最划算',
+    price: 25,
+    credits: 350,
+    perCredit: '0.07',
+    border: 'border-blue-500/50',
+    btnClass: 'w-full py-2.5 rounded-xl font-bold text-sm bg-blue-600 hover:bg-blue-500 text-white transition-all',
+    glow: '0 0 20px rgba(59,130,246,0.15)',
+  },
+]
 
 const TABS = [
-  { id: 'profile',   icon: <User size={15} />,   label: '個人資料' },
-  { id: 'referral',  icon: <Link2 size={15} />,  label: '推薦連結' },
-  { id: 'password',  icon: <Lock size={15} />,   label: '修改密碼' },
-  { id: 'email',     icon: <Mail size={15} />,   label: '修改信箱' },
-  { id: 'credits',   icon: <Coins size={15} />,  label: '購買點數' },
+  { id: 'profile',  icon: <User size={15} />,   label: '個人資料' },
+  { id: 'referral', icon: <Link2 size={15} />,  label: '推薦連結' },
+  { id: 'password', icon: <Lock size={15} />,   label: '修改密碼' },
+  { id: 'email',    icon: <Mail size={15} />,   label: '修改信箱' },
+  { id: 'credits',  icon: <Coins size={15} />,  label: '購買點數' },
 ]
 
 export default function Settings() {
@@ -18,8 +52,10 @@ export default function Settings() {
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState(searchParams.get('tab') || 'profile')
   const [profile, setProfile] = useState(null)
-  const [plans, setPlans] = useState([])
   const [copied, setCopied] = useState(false)
+  const [buyLoading, setBuyLoading] = useState(null)
+  const [showManual, setShowManual] = useState(false)
+  const [selectedPlan, setSelectedPlan] = useState(null)
 
   // 修改密碼
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -32,7 +68,6 @@ export default function Settings() {
 
   useEffect(() => {
     axios.get('/auth/me').then(r => setProfile(r.data.user)).catch(() => {})
-    axios.get('/payment/plans').then(r => setPlans(r.data.plans)).catch(() => {})
   }, [])
 
   const referralLink = profile?.referral_code
@@ -72,24 +107,27 @@ export default function Settings() {
     } finally { setEmailLoading(false) }
   }
 
-  const handleBuyPlan = async (planId) => {
+  const handleBuy = async (plan) => {
+    setBuyLoading(plan.id)
     try {
-      const res = await axios.post('/payment/checkout', { planId })
+      const res = await axios.post('/payment/checkout', { planId: plan.id })
       window.location.href = res.data.url
     } catch (err) {
       const e = err.response?.data
       if (e?.error === 'PAYMENT_NOT_CONFIGURED') {
-        toast.error('付款系統尚未設定，請聯絡管理員')
+        setSelectedPlan(plan)
+        setShowManual(true)
       } else {
         toast.error(e?.message || '建立付款失敗')
       }
-    }
+    } finally { setBuyLoading(null) }
   }
 
   return (
     <div className="max-w-2xl mx-auto">
       <h1 className="text-xl font-black mb-6">帳號設定</h1>
 
+      {/* Tab Bar */}
       <div className="flex gap-1 bg-white/5 rounded-xl p-1 mb-6 flex-wrap">
         {TABS.map(t => (
           <button key={t.id} onClick={() => setTab(t.id)}
@@ -111,11 +149,13 @@ export default function Settings() {
             </div>
             <div className="bg-white/5 rounded-xl p-4">
               <p className="text-white/40 text-xs mb-1">電子信箱</p>
-              <p className="font-bold text-sm">{profile.email}</p>
+              <p className="font-bold text-sm truncate">{profile.email}</p>
             </div>
             <div className="bg-white/5 rounded-xl p-4">
               <p className="text-white/40 text-xs mb-1">剩餘點數</p>
-              <p className="font-black text-neon text-xl">{profile.credits} <span className="text-sm text-white/40">點</span></p>
+              <p className="font-black text-xl" style={{ color: '#c8ff3e' }}>
+                {profile.credits} <span className="text-sm text-white/40">點</span>
+              </p>
             </div>
             <div className="bg-white/5 rounded-xl p-4">
               <p className="text-white/40 text-xs mb-1">加入日期</p>
@@ -126,6 +166,11 @@ export default function Settings() {
             <p className="text-white/40 text-xs mb-1">會員 ID</p>
             <p className="font-mono text-xs text-white/50">{profile.id}</p>
           </div>
+          {profile.role === 'admin' && (
+            <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
+              <span className="text-red-400 text-xs font-bold">👑 管理員帳號</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -133,13 +178,13 @@ export default function Settings() {
       {tab === 'referral' && profile && (
         <div className="card space-y-5">
           <h2 className="font-bold text-lg">推薦連結</h2>
-          <div className="bg-[#c8ff3e]/5 border border-[#c8ff3e]/20 rounded-xl p-4 text-center">
-            <p className="text-neon font-black text-3xl mb-1">{profile.referralCount || 0}</p>
+          <div className="rounded-xl p-4 text-center" style={{ background: 'rgba(200,255,62,0.05)', border: '1px solid rgba(200,255,62,0.2)' }}>
+            <p className="font-black text-3xl mb-1" style={{ color: '#c8ff3e' }}>{profile.referralCount || 0}</p>
             <p className="text-white/40 text-sm">成功推薦人數</p>
           </div>
-          <div className="bg-white/5 border border-[#c8ff3e]/20 rounded-xl p-4">
-            <p className="text-white/40 text-xs mb-3">你的推薦碼</p>
-            <p className="font-mono font-black text-neon text-xl tracking-widest" style={{color:'#c8ff3e'}}>{profile.referral_code}</p>
+          <div className="bg-white/5 rounded-xl p-4" style={{ borderColor: 'rgba(200,255,62,0.2)', border: '1px solid' }}>
+            <p className="text-white/40 text-xs mb-2">你的推薦碼</p>
+            <p className="font-mono font-black text-xl tracking-widest" style={{ color: '#c8ff3e' }}>{profile.referral_code}</p>
           </div>
           <div>
             <p className="text-white/40 text-xs mb-2">推薦連結（分享給朋友）</p>
@@ -148,7 +193,8 @@ export default function Settings() {
                 {referralLink}
               </div>
               <button onClick={copyLink}
-                className="flex items-center gap-1.5 bg-[#c8ff3e] text-black text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-[#d4ff5a] transition-colors shrink-0">
+                className="flex items-center gap-1.5 text-black text-xs font-bold px-4 py-2.5 rounded-xl transition-colors shrink-0"
+                style={{ background: '#c8ff3e' }}>
                 {copied ? <Check size={13} /> : <Copy size={13} />}
                 {copied ? '已複製' : '複製'}
               </button>
@@ -156,8 +202,8 @@ export default function Settings() {
           </div>
           <div className="bg-white/5 rounded-xl p-4 space-y-2 text-sm text-white/50">
             <p className="text-white font-semibold text-xs mb-2">推薦獎勵規則</p>
-            <p>• 朋友使用你的推薦碼註冊 → 他們獲得 <span className="text-neon font-bold">30 點</span></p>
-            <p>• 同時你也獲得 <span className="text-neon font-bold">30 點</span> 獎勵</p>
+            <p>• 朋友使用你的推薦碼註冊 → 他們獲得 <span className="font-bold" style={{ color: '#c8ff3e' }}>30 點</span></p>
+            <p>• 同時你也獲得 <span className="font-bold" style={{ color: '#c8ff3e' }}>30 點</span> 獎勵</p>
             <p>• 無限制推薦人數，越多越多！</p>
           </div>
         </div>
@@ -227,33 +273,98 @@ export default function Settings() {
       {/* 購買點數 */}
       {tab === 'credits' && (
         <div className="space-y-4">
+          {/* 剩餘點數 */}
           <div className="card flex items-center justify-between">
             <div>
               <p className="text-white/40 text-sm">目前剩餘點數</p>
-              <p className="font-black text-neon text-3xl">{user?.credits ?? 0} <span className="text-base text-white/40">點</span></p>
+              <p className="font-black text-3xl" style={{ color: '#c8ff3e' }}>
+                {user?.credits ?? 0} <span className="text-base text-white/40">點</span>
+              </p>
             </div>
-            <Coins size={36} className="text-neon/30" />
+            <Coins size={36} style={{ color: 'rgba(200,255,62,0.3)' }} />
           </div>
+
+          {/* 方案卡片 */}
           <div className="grid gap-3">
-            {plans.map(plan => (
-              <div key={plan.id} className="card flex items-center justify-between">
+            {PLANS.map(plan => (
+              <div
+                key={plan.id}
+                className={`relative bg-[#111114] border rounded-2xl p-5 flex items-center justify-between ${plan.border}`}
+                style={plan.glow ? { boxShadow: plan.glow } : {}}
+              >
+                {plan.badge && (
+                  <span className="absolute -top-2.5 left-4 text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: plan.id === 'popular' ? '#ff3d8a' : '#2563eb', color: 'white' }}>
+                    {plan.badge}
+                  </span>
+                )}
                 <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-bold">{plan.name}</p>
-                    {plan.badge && <span className="text-xs bg-[#c8ff3e]/20 text-neon px-2 py-0.5 rounded-full">{plan.badge}</span>}
-                  </div>
-                  <p className="text-white/40 text-sm">{plan.desc}</p>
-                  <p className="text-neon font-black mt-1">{plan.credits} 點</p>
+                  <p className="font-bold text-base mb-0.5">{plan.name}</p>
+                  <p className="font-black text-lg" style={{ color: '#c8ff3e' }}>{plan.credits} 點數</p>
+                  <p className="text-white/30 text-xs mt-0.5">每點 ${plan.perCredit} · 永久有效</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-black text-xl mb-2">${plan.priceUSD}</p>
-                  <button onClick={() => handleBuyPlan(plan.id)}
-                    className="btn-neon py-2 px-5 text-sm font-bold">
-                    購買
+                  <p className="font-black text-2xl mb-2">${plan.price}</p>
+                  <button
+                    onClick={() => handleBuy(plan)}
+                    disabled={buyLoading === plan.id}
+                    className={plan.btnClass}
+                    style={{ minWidth: '80px' }}
+                  >
+                    {buyLoading === plan.id ? (
+                      <span className="flex items-center justify-center gap-1">
+                        <span className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                        處理中
+                      </span>
+                    ) : '購買'}
                   </button>
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* 查看完整定價頁面 */}
+          <Link to="/pricing"
+            className="flex items-center justify-center gap-2 py-3 bg-white/5 hover:bg-white/8 border border-white/10 rounded-xl text-sm font-medium text-white/60 hover:text-white transition-colors">
+            <ExternalLink size={14} />查看完整方案對比與模型介紹
+          </Link>
+
+          {/* 點數說明 */}
+          <div className="bg-white/5 rounded-xl p-4 text-xs text-white/30 text-center space-y-1">
+            <p>生成失敗自動退還點數</p>
+            <p>點數永久不過期 · 一次購買</p>
+          </div>
+        </div>
+      )}
+
+      {/* 手動付款 Modal */}
+      {showManual && selectedPlan && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-[#111114] border border-white/10 rounded-2xl max-w-md w-full p-7">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-lg">購買 {selectedPlan.name}</h3>
+              <button onClick={() => setShowManual(false)} className="text-white/30 hover:text-white">
+                <span className="text-xl">×</span>
+              </button>
+            </div>
+            <div className="rounded-xl p-4 mb-5 text-center" style={{ background: 'rgba(200,255,62,0.08)', border: '1px solid rgba(200,255,62,0.2)' }}>
+              <div className="text-4xl font-black">${selectedPlan.price}</div>
+              <div className="font-bold mt-1" style={{ color: '#c8ff3e' }}>{selectedPlan.credits} 點數</div>
+            </div>
+            <div className="space-y-2 text-sm text-white/40 mb-6">
+              <p className="font-semibold text-white/70">購買方式：</p>
+              <p>1. 記下你的帳號 Email</p>
+              <p>2. 透過下方聯繫方式告知購買方案</p>
+              <p>3. 付款完成後 24 小時內手動發點</p>
+            </div>
+            <a href="mailto:contact@goblinai.com" className="btn-neon w-full flex items-center justify-center gap-2 py-3 mb-2">
+              聯絡購買
+            </a>
+            <button onClick={() => setShowManual(false)}
+              className="w-full py-3 bg-white/8 hover:bg-white/12 rounded-xl text-sm font-medium transition-colors">
+              取消
+            </button>
+            {user && <p className="text-center text-white/20 text-xs mt-3">你的帳號：{user.email}</p>}
           </div>
         </div>
       )}
