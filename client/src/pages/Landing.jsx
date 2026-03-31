@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
-import { Sparkles, Zap, Image, Video, ArrowRight, Check, Play } from 'lucide-react'
+import { Sparkles, Zap, Image, Video, ArrowRight, Check, Play, Coins } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 const TOOLS = [
   { emoji: '🖼️', name: '文字生圖', desc: 'FLUX · SDXL', badge: 'HOT', badgeColor: 'badge-neon' },
@@ -34,6 +35,7 @@ const SAMPLE_PROMPTS = [
 ]
 
 export default function Landing() {
+  const { user } = useAuth()
   return (
     <div className="min-h-screen bg-[#08080a]">
       {/* 促銷橫幅 */}
@@ -53,8 +55,19 @@ export default function Landing() {
           </div>
           <div className="flex items-center gap-2">
             <Link to="/pricing" className="btn-ghost hidden sm:block text-white/50">定價</Link>
-            <Link to="/login" className="btn-ghost text-white/50">登入</Link>
-            <Link to="/register" className="btn-neon py-1.5 px-4 text-xs">免費開始</Link>
+            {user ? (
+              <>
+                <Link to="/settings?tab=credits" className="hidden sm:flex items-center gap-1.5 border border-white/10 px-3 py-1.5 rounded-lg text-sm" style={{ color: '#c8ff3e', background: 'rgba(200,255,62,0.08)', borderColor: 'rgba(200,255,62,0.2)' }}>
+                  <Coins size={13} /><span className="font-black">{user.credits ?? 0}</span><span className="text-xs opacity-60">點</span>
+                </Link>
+                <Link to="/generate" className="btn-neon py-1.5 px-4 text-xs">開始創作</Link>
+              </>
+            ) : (
+              <>
+                <Link to="/login" className="btn-ghost text-white/50">登入</Link>
+                <Link to="/register" className="btn-neon py-1.5 px-4 text-xs">免費開始</Link>
+              </>
+            )}
           </div>
         </div>
       </nav>
