@@ -6,6 +6,65 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Upload, X, Download, Settings, ChevronDown, ChevronUp, Coins, Wand2, Shuffle } from 'lucide-react'
 
+// ── 圖片格子元件（全 inline style，避免 Tailwind JIT purge）────────
+function GridImageCard({ url, index, isPublished, canReward, onZoom, onPublish }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{ position: 'relative', aspectRatio: '1/1', background: '#000', borderRadius: '12px', overflow: 'hidden', cursor: 'zoom-in' }}>
+      {/* 圖片：雙擊放大 */}
+      <img src={url} alt={`#${index + 1}`}
+        onDoubleClick={onZoom}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+
+      {/* 編號標籤（常駐）*/}
+      <span style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.65)', color: 'rgba(255,255,255,0.7)', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+        #{index + 1}
+      </span>
+
+      {/* 已公開標籤 */}
+      {isPublished && (
+        <span style={{ position: 'absolute', top: 6, right: 6, background: '#c8ff3e', color: '#000', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>
+          已公開
+        </span>
+      )}
+
+      {/* Hover 操作列（底部滑出）*/}
+      <div style={{
+        position: 'absolute', left: 0, right: 0, bottom: 0,
+        background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
+        padding: '20px 8px 8px',
+        display: 'flex', flexDirection: 'column', gap: 4,
+        transform: hovered ? 'translateY(0)' : 'translateY(100%)',
+        transition: 'transform 0.2s ease',
+      }}>
+        {/* 雙擊提示 + 放大 / 下載 */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          <button onMouseDown={e => { e.preventDefault(); onZoom() }}
+            style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 10, fontWeight: 700, border: 'none', borderRadius: 8, padding: '5px 0', cursor: 'pointer' }}>
+            🔍 放大
+          </button>
+          <a href={url} download target="_blank" rel="noreferrer"
+            style={{ flex: 1, background: '#c8ff3e', color: '#000', fontSize: 10, fontWeight: 700, border: 'none', borderRadius: 8, padding: '5px 0', cursor: 'pointer', textAlign: 'center', textDecoration: 'none' }}>
+            ↓ 下載
+          </a>
+        </div>
+        {/* 獎勵按鈕 */}
+        {isPublished ? (
+          <div style={{ textAlign: 'center', fontSize: 9, color: 'rgba(200,255,62,0.8)', padding: '3px 0' }}>✅ 已領取獎勵</div>
+        ) : (
+          <button onMouseDown={e => { e.preventDefault(); if (canReward) onPublish() }}
+            style={{ width: '100%', background: canReward ? '#ff3d8a' : 'rgba(255,255,255,0.08)', color: canReward ? '#fff' : 'rgba(255,255,255,0.25)', fontSize: 10, fontWeight: 700, border: 'none', borderRadius: 8, padding: '5px 0', cursor: canReward ? 'pointer' : 'not-allowed' }}>
+            🎁 公開 +1 點{!canReward ? '（今日已達上限）' : ''}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── 風格預設 ──────────────────────────────────────────────────────
 const STYLES = [
   { id: 'none',       label: '無風格',    emoji: '✨', keywords: '' },
@@ -732,65 +791,35 @@ export default function Generate() {
               </div>
             </div>
 
-            {/* 圖片 Grid — 可滾動，inline style 避免 Tailwind purge */}
+            {/* 圖片 Grid / 單張 — 全部用 inline style，不依賴 Tailwind */}
             {results.length > 1 ? (
-              <div className="overflow-y-auto flex-1 p-2" style={{ minHeight: 0 }}>
+              <div style={{ flex: 1, overflowY: 'auto', padding: '8px', minHeight: 0 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
                   {results.map((url, i) => {
                     const genId = resultIds[i]
                     const isPublished = publishedIds.has(genId)
                     const canReward = !isPublished && dailyReward.today_count < dailyReward.daily_limit
                     return (
-                      <div key={i} className="relative group bg-black rounded-xl overflow-hidden"
-                        style={{ aspectRatio: '1 / 1', cursor: 'zoom-in' }}>
-                        {/* 點擊放大 */}
-                        <img src={url} alt={`生成結果 ${i + 1}`}
-                          className="w-full h-full object-cover"
-                          onClick={() => setLightbox(url)} />
-                        {/* hover overlay — 阻止點擊穿透到 img */}
-                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-end justify-start gap-1 p-1.5"
-                          style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 50%, rgba(0,0,0,0.7) 100%)' }}>
-                          <span className="bg-black/60 text-white/60 text-[9px] px-1.5 py-0.5 rounded self-start">#{i + 1}</span>
-                          <div className="flex-1" />
-                          <div className="flex gap-1 w-full">
-                            <button onClick={(e) => { e.stopPropagation(); setLightbox(url) }}
-                              className="flex-1 bg-white/20 text-white text-[10px] font-bold py-1 rounded-lg hover:bg-white/30">
-                              🔍 放大
-                            </button>
-                            <a href={url} download target="_blank" rel="noreferrer"
-                              onClick={e => e.stopPropagation()}
-                              className="flex-1 bg-[#c8ff3e] text-black text-[10px] font-bold py-1 rounded-lg text-center hover:bg-[#d4ff5c]">
-                              ↓ 下載
-                            </a>
-                          </div>
-                          {isPublished ? (
-                            <div className="w-full text-center text-[9px] text-[#c8ff3e]/80 bg-black/40 py-0.5 rounded-lg">✅ 已領取獎勵</div>
-                          ) : (
-                            <button onClick={(e) => { e.stopPropagation(); handlePublish(genId, i) }}
-                              disabled={!canReward}
-                              className="w-full text-[10px] font-bold py-1 rounded-lg transition-all"
-                              style={{ background: canReward ? '#ff3d8a' : 'rgba(255,255,255,0.08)', color: canReward ? '#fff' : 'rgba(255,255,255,0.25)', cursor: canReward ? 'pointer' : 'not-allowed' }}>
-                              🎁 公開 +1 點
-                            </button>
-                          )}
-                        </div>
-                        {isPublished && (
-                          <span className="absolute top-1.5 right-1.5 text-[9px] px-1.5 py-0.5 rounded font-bold"
-                            style={{ background: '#c8ff3e', color: '#000' }}>已公開</span>
-                        )}
-                      </div>
+                      <GridImageCard
+                        key={i} url={url} index={i}
+                        isPublished={isPublished} canReward={canReward}
+                        onZoom={() => setLightbox(url)}
+                        onDownload={() => {}}
+                        onPublish={() => handlePublish(genId, i)}
+                      />
                     )
                   })}
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex items-center justify-center bg-black" style={{ minHeight: '300px', cursor: resultType !== 'video' ? 'zoom-in' : 'default' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#000', minHeight: '300px' }}>
                 {resultType === 'video' ? (
                   <video src={result} controls autoPlay className="max-w-full max-h-full rounded-xl" />
                 ) : (
                   <img src={result} alt="生成結果"
-                    className="max-w-full max-h-full object-contain rounded-xl"
-                    onClick={() => setLightbox(result)} />
+                    title="雙擊放大"
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px', cursor: 'zoom-in' }}
+                    onDoubleClick={() => setLightbox(result)} />
                 )}
               </div>
             )}
@@ -862,28 +891,29 @@ export default function Generate() {
       </div>
     </div>
 
-    {/* ── Lightbox 放大圖片 ──────────────────────────────────── */}
+    {/* ── Lightbox 放大圖片（全 inline style）──────────────────── */}
     {lightbox && (
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
-        style={{ background: 'rgba(0,0,0,0.92)' }}
-        onClick={() => setLightbox(null)}>
-        <div className="relative max-w-5xl w-full flex flex-col items-center gap-3"
-          onClick={e => e.stopPropagation()}>
-          {/* 關閉按鈕 */}
+      <div onClick={() => setLightbox(null)}
+        style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.93)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div onClick={e => e.stopPropagation()}
+          style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          {/* 關閉 */}
           <button onClick={() => setLightbox(null)}
-            className="absolute -top-10 right-0 text-white/50 hover:text-white text-2xl leading-none">✕</button>
-          {/* 放大圖片 */}
+            style={{ position: 'absolute', top: -36, right: 0, background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
+          {/* 圖片 */}
           <img src={lightbox} alt="放大預覽"
-            className="rounded-2xl shadow-2xl"
-            style={{ maxHeight: 'calc(100vh - 120px)', maxWidth: '100%', objectFit: 'contain' }} />
-          {/* 操作按鈕 */}
-          <div className="flex gap-3">
+            style={{ maxWidth: '90vw', maxHeight: 'calc(90vh - 60px)', objectFit: 'contain', borderRadius: 16, boxShadow: '0 0 60px rgba(0,0,0,0.8)' }} />
+          {/* 操作 */}
+          <div style={{ display: 'flex', gap: 8 }}>
             <a href={lightbox} download target="_blank" rel="noreferrer"
-              className="btn-neon flex items-center gap-2 px-5 py-2 text-sm" onClick={e => e.stopPropagation()}>
+              onClick={e => e.stopPropagation()}
+              style={{ background: '#c8ff3e', color: '#000', fontWeight: 700, fontSize: 13, padding: '8px 20px', borderRadius: 10, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Download size={14} />下載原圖
             </a>
-            <button onClick={() => setLightbox(null)} className="btn-secondary px-5 py-2 text-sm">關閉</button>
+            <button onClick={() => setLightbox(null)}
+              style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 13, padding: '8px 20px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer' }}>
+              關閉
+            </button>
           </div>
         </div>
       </div>
