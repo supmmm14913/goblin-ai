@@ -50,7 +50,7 @@ function MediaCard({ item }) {
           )
         ) : (
           /* 圖片：單擊放大（vanilla-JS lightbox，不依賴 React Portal） */
-          <div style={{ position: 'relative', cursor: 'zoom-in' }} onClick={() => openLightbox(url)}>
+          <div style={{ position: 'relative', cursor: 'zoom-in' }} onClick={() => openLightbox(url, { prompt: item.prompt, model: item.model })}>
             <img
               src={url}
               alt={item.prompt}

@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
@@ -8,14 +8,14 @@ import { Upload, X, Download, Settings, ChevronDown, ChevronUp, Coins, Wand2, Sh
 import { openLightbox } from '../utils/lightbox'
 
 // ── 圖片格子元件（全 inline style，vanilla-JS lightbox）──────────
-function GridImageCard({ url, index, isPublished, canReward, onPublish }) {
+function GridImageCard({ url, index, isPublished, canReward, onPublish, prompt, modelId }) {
   const [hovered, setHovered] = useState(false)
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onClick={() => openLightbox(url)}
+      onClick={() => openLightbox(url, { prompt, model: modelId })}
       title="點擊放大"
       style={{ position: 'relative', aspectRatio: '1/1', background: '#000', borderRadius: '12px', overflow: 'hidden', cursor: 'zoom-in', userSelect: 'none' }}>
 
@@ -197,6 +197,7 @@ const RANDOM_SUBJECTS = [
 
 export default function Generate() {
   const { user, updateCredits } = useAuth()
+  const location = useLocation()
   const [tab, setTab] = useState('text-image')
   const [prompt, setPrompt] = useState('')
   const [negativePrompt, setNegativePrompt] = useState('')
@@ -222,6 +223,17 @@ export default function Generate() {
   const [publishedIds, setPublishedIds] = useState(new Set()) // 已領獎的 id
   const [dailyReward, setDailyReward] = useState({ today_count: 0, daily_limit: 5 })
 
+  // 從 URL ?prompt= 讀取提示詞（由 lightbox「複製到生成器」按鈕導向）
+  useEffect(() => {
+    const params = new URLSearchParams(location.search)
+    const p = params.get('prompt')
+    if (p) {
+      setPrompt(p)
+      setTab('text-image')
+      // 清除 URL 參數，避免重新整理時重複填入
+      window.history.replaceState({}, '', '/generate')
+    }
+  }, [location.search])
 
   const onDrop = useCallback((files) => {
     const file = files[0]; if (!file) return
@@ -809,6 +821,7 @@ export default function Generate() {
                         key={i} url={url} index={i}
                         isPublished={isPublished} canReward={canReward}
                         onPublish={() => handlePublish(genId, i)}
+                        prompt={prompt} modelId={model}
                       />
                     )
                   })}
@@ -822,7 +835,7 @@ export default function Generate() {
                   <img src={result} alt="生成結果"
                     title="點擊放大"
                     style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px', cursor: 'zoom-in' }}
-                    onClick={() => openLightbox(result)} />
+                    onClick={() => openLightbox(result, { prompt, model })} />
                 )}
               </div>
             )}
