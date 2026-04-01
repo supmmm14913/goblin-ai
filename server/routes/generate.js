@@ -136,25 +136,48 @@ function hasChinese(text) {
   return /[\u4e00-\u9fff\u3400-\u4dbf\uff00-\uffef]/.test(text);
 }
 
-// 免費翻譯（MyMemory API，無需 Key，每天 1000 次）
-async function translateToEnglish(text) {
-  // 分段翻譯（避免超過 500 字元限制）
-  const cleanText = text.replace(/\s*--\s*style:.*$/i, '').trim(); // 先移除 style 標記
+// 翻譯單一短句（< 400 字元）
+async function translateChunk(chunk) {
   try {
-    const encoded = encodeURIComponent(cleanText);
-    const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=zh|en`;
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=zh|en`;
     const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
     const data = await res.json();
     if (data.responseStatus === 200 && data.responseData?.translatedText) {
-      const translated = data.responseData.translatedText;
-      if (hasChinese(translated)) return cleanText; // 仍有中文，翻譯失敗
-      console.log(`[翻譯] "${cleanText}" → "${translated}"`);
-      return translated;
+      const t = data.responseData.translatedText;
+      if (!hasChinese(t)) return t;
     }
-  } catch (e) {
-    console.warn('[翻譯失敗，使用原始提示詞]', e.message);
+  } catch (e) { /* ignore */ }
+  return chunk; // 翻譯失敗就保留原文
+}
+
+// 智慧翻譯：只翻譯中文片段，SD 語法 / 英文 Tags 保留不動
+async function translateToEnglish(text) {
+  const cleanText = text.replace(/\s*--\s*style:.*$/i, '').trim();
+
+  // 若不含中文，直接返回
+  if (!hasChinese(cleanText)) return cleanText;
+
+  // 若提詞含有 SD 語法標記（BREAK / weight syntax），只替換中文片段
+  const hasSDSyntax = /BREAK|:\d+\.\d+\)|score_\d|source_real/i.test(cleanText);
+  if (hasSDSyntax) {
+    // 抽取所有連續中文片段，逐一翻譯後替換
+    const chinesePattern = /[\u4e00-\u9fff\u3400-\u4dbf\uff00-\uffef]+/g;
+    const segments = [...new Set(cleanText.match(chinesePattern) || [])];
+    let result = cleanText;
+    for (const seg of segments) {
+      if (seg.length > 100) continue; // 超長中文段落跳過
+      const translated = await translateChunk(seg);
+      result = result.replace(new RegExp(seg, 'g'), translated);
+    }
+    console.log('[翻譯] SD 提詞模式：只替換中文片段');
+    return result;
   }
-  return cleanText;
+
+  // 純中文提詞：整段翻譯（限 400 字元）
+  const chunk = cleanText.slice(0, 400);
+  const translated = await translateChunk(chunk);
+  console.log(`[翻譯] "${chunk.slice(0,50)}..." → "${translated.slice(0,50)}..."`);
+  return translated + (cleanText.length > 400 ? ' ' + cleanText.slice(400) : '');
 }
 
 // 風格關鍵詞對照表（後端也維護一份，確保安全）
