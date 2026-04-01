@@ -77,26 +77,36 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
   const apiKey = process.env.NOVITA_API_KEY;
   if (!apiKey) throw new Error('NOVITA_API_KEY 未設定，請至 Railway 環境變數新增');
 
+  // SD1.5 系列最佳尺寸限制（SDXL 可到 1024）
+  const isXL = modelName.includes('xl') || modelName.includes('XL') || modelName === 'sd_xl_base_1.0.safetensors';
+  const maxRes = isXL ? 1024 : 768;
+  const reqW = Math.min(Math.max(Math.round((width  || 512) / 64) * 64, 256), maxRes);
+  const reqH = Math.min(Math.max(Math.round((height || 768) / 64) * 64, 256), maxRes);
+
+  const body = {
+    model_name: modelName,
+    prompt,
+    negative_prompt: negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy',
+    width:  reqW,
+    height: reqH,
+    steps: 25,
+    cfg_scale: 7,
+    sampler_name: 'DPM++ 2M Karras',
+    image_num: 1,
+    seed: -1,
+  };
+  console.log('[NovitaAI] 提交:', { model_name: modelName, width: reqW, height: reqH });
+
   // 提交任務
   const submitRes = await fetch('https://api.novita.ai/v3/async/txt2img', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model_name: modelName,
-      prompt,
-      negative_prompt: negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy',
-      width:  Math.min(Math.max(width  || 512, 256), 1024),
-      height: Math.min(Math.max(height || 768, 256), 1024),
-      steps: 20,
-      cfg_scale: 7,
-      sampler_name: 'DPM++ 2M Karras',
-      image_num: 1,
-      seed: -1,
-    }),
+    body: JSON.stringify(body),
   });
   if (!submitRes.ok) {
-    const err = await submitRes.json().catch(() => ({}));
-    throw new Error(`NovitaAI 提交失敗: ${err.message || err.reason || submitRes.status}`);
+    const errBody = await submitRes.text().catch(() => '');
+    console.error('[NovitaAI] 提交失敗:', submitRes.status, errBody);
+    throw new Error(`NovitaAI 提交失敗 (${submitRes.status}): ${errBody}`);
   }
   const { task_id } = await submitRes.json();
 
@@ -115,7 +125,9 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
       return url;
     }
     if (status === 'TASK_STATUS_FAILED') {
-      throw new Error(`NovitaAI 生成失敗: ${data.task?.reason || '未知錯誤'}`);
+      const reason = data.task?.reason || data.task?.err_detail || JSON.stringify(data.task) || '未知錯誤';
+      console.error('[NovitaAI] 任務失敗:', reason);
+      throw new Error(`NovitaAI 生成失敗: ${reason}`);
     }
   }
   throw new Error('NovitaAI 生成超時（3 分鐘），點數已退還');
@@ -286,11 +298,13 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
     await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
     await db.updateOne('generations', { id }, { status: 'failed' });
     console.error('生成錯誤:', err.message);
-    let userMsg = '圖片生成失敗';
+    let userMsg = `圖片生成失敗：${err.message}`;
     if (err.message.includes('402') || err.message.includes('Insufficient credit')) {
-      userMsg = 'Replicate 餘額不足，請至 https://replicate.com/account/billing 儲值（約 $5 即可生成 1600 張）';
+      userMsg = 'Replicate 餘額不足，請至 https://replicate.com/account/billing 儲值';
     } else if (err.message.includes('429')) {
       userMsg = '請求過於頻繁，請稍等幾秒後再試';
+    } else if (err.message.includes('NOVITA_API_KEY')) {
+      userMsg = 'NovitaAI API Key 未設定，請至 Railway 環境變數新增 NOVITA_API_KEY';
     }
     res.status(500).json({ error: userMsg });
   }
