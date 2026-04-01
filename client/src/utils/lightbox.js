@@ -1,17 +1,18 @@
 /**
  * Vanilla-JS lightbox — direct DOM injection, bypasses React entirely.
- * Uses explicit individual style properties (no CSS shorthand like `inset`)
- * for maximum browser compatibility.
+ * Uses setAttribute('style', ...) with native kebab-case CSS for maximum
+ * browser compatibility. No camelCase JS style property issues.
  *
  * openLightbox(url, info?)
  *   url   — image URL
- *   info  — optional { prompt, model, type } for info panel
+ *   info  — optional { prompt, model } for info panel
  */
 
 const ID = '__goblin_lb__'
 
-function css(el, styles) {
-  Object.keys(styles).forEach(k => { el.style[k] = styles[k] })
+/* Set full style via attribute string (kebab-case CSS, not camelCase JS) */
+function st(el, css) {
+  el.setAttribute('style', css)
 }
 
 export function openLightbox(url, info = {}) {
@@ -35,121 +36,103 @@ export function openLightbox(url, info = {}) {
   /* ── Backdrop ──────────────────────────────────── */
   const backdrop = document.createElement('div')
   backdrop.id = ID
-  css(backdrop, {
-    position:        'fixed',
-    top:             '0',
-    left:            '0',
-    right:           '0',
-    bottom:          '0',
-    width:           '100%',
-    height:          '100%',
-    zIndex:          '2147483647',
-    background:      'rgba(0,0,0,0.93)',
-    display:         'flex',
-    flexDirection:   'column',
-    alignItems:      'center',
-    justifyContent:  'center',
-    overflowY:       'auto',
-    padding:         '24px 16px',
-    boxSizing:       'border-box',
-    cursor:          'zoom-out',
-    fontFamily:      'Inter, system-ui, sans-serif',
-  })
+  st(backdrop, [
+    'position:fixed',
+    'top:0',
+    'left:0',
+    'right:0',
+    'bottom:0',
+    'width:100%',
+    'height:100%',
+    'z-index:2147483647',
+    'background:rgba(0,0,0,0.93)',
+    'display:flex',
+    'flex-direction:column',
+    'align-items:center',
+    'justify-content:center',
+    'overflow-y:auto',
+    'padding:24px 16px',
+    'box-sizing:border-box',
+    'cursor:zoom-out',
+    'font-family:Inter,system-ui,sans-serif',
+  ].join(';'))
   backdrop.addEventListener('click', close)
 
-  /* ── Card (stops propagation) ──────────────────── */
+  /* ── Card ──────────────────────────────────────── */
   const card = document.createElement('div')
-  css(card, {
-    position:       'relative',
-    display:        'flex',
-    flexDirection:  'column',
-    alignItems:     'stretch',
-    width:          'min(480px, 92vw)',
-    background:     '#111114',
-    borderRadius:   '18px',
-    overflow:       'hidden',
-    border:         '1px solid rgba(255,255,255,0.09)',
-    boxShadow:      '0 24px 80px rgba(0,0,0,0.8)',
-    cursor:         'default',
-  })
+  st(card, [
+    'position:relative',
+    'display:flex',
+    'flex-direction:column',
+    'align-items:stretch',
+    'width:min(480px,92vw)',
+    'background:#111114',
+    'border-radius:18px',
+    'overflow:hidden',
+    'border:1px solid rgba(255,255,255,0.09)',
+    'box-shadow:0 24px 80px rgba(0,0,0,0.8)',
+    'cursor:default',
+  ].join(';'))
   card.addEventListener('click', function(e) { e.stopPropagation() })
 
   /* ── Image ─────────────────────────────────────── */
   const img = document.createElement('img')
   img.src = url
   img.alt = '放大預覽'
-  css(img, {
-    display:      'block',
-    width:        '100%',
-    maxHeight:    '60vh',
-    objectFit:    'contain',
-    background:   '#000',
-  })
+  st(img, [
+    'display:block',
+    'width:100%',
+    'max-height:60vh',
+    'object-fit:contain',
+    'background:#000',
+  ].join(';'))
 
-  /* ── Info panel (shown only if prompt/model provided) ─ */
+  /* ── Info panel ────────────────────────────────── */
   const panel = document.createElement('div')
-  css(panel, {
-    padding:   '14px 16px',
-    display:   'flex',
-    flexDirection: 'column',
-    gap:       '10px',
-  })
+  st(panel, 'padding:14px 16px;display:flex;flex-direction:column;gap:10px')
 
   const hasInfo = info.prompt || info.model
 
   if (hasInfo) {
-    // ── Prompt row
+    // Prompt row
     if (info.prompt) {
       const promptWrap = document.createElement('div')
-      css(promptWrap, { display: 'flex', flexDirection: 'column', gap: '4px' })
+      st(promptWrap, 'display:flex;flex-direction:column;gap:4px')
 
       const promptLabel = document.createElement('span')
       promptLabel.textContent = '提示詞'
-      css(promptLabel, { fontSize: '10px', color: 'rgba(255,255,255,0.35)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' })
+      st(promptLabel, 'font-size:10px;color:rgba(255,255,255,0.35);font-weight:600;text-transform:uppercase;letter-spacing:0.06em')
 
       const promptRow = document.createElement('div')
-      css(promptRow, { display: 'flex', alignItems: 'flex-start', gap: '8px', background: 'rgba(255,255,255,0.04)', borderRadius: '10px', padding: '8px 10px', border: '1px solid rgba(255,255,255,0.07)' })
+      st(promptRow, 'display:flex;align-items:flex-start;gap:8px;background:rgba(255,255,255,0.04);border-radius:10px;padding:8px 10px;border:1px solid rgba(255,255,255,0.07)')
 
       const promptText = document.createElement('span')
       promptText.textContent = info.prompt
-      css(promptText, {
-        flex: '1',
-        fontSize:    '12px',
-        color:       'rgba(255,255,255,0.75)',
-        lineHeight:  '1.5',
-        wordBreak:   'break-word',
-        display:     '-webkit-box',
-        webkitLineClamp: '3',
-        webkitBoxOrient: 'vertical',
-        overflow:    'hidden',
-      })
-      promptText.style['-webkit-line-clamp'] = '3'
-      promptText.style['-webkit-box-orient'] = 'vertical'
+      st(promptText, [
+        'flex:1',
+        'font-size:12px',
+        'color:rgba(255,255,255,0.75)',
+        'line-height:1.5',
+        'word-break:break-word',
+        'overflow:hidden',
+        'display:-webkit-box',
+        '-webkit-line-clamp:3',
+        '-webkit-box-orient:vertical',
+      ].join(';'))
 
-      // Copy prompt button
       const copyBtn = document.createElement('button')
       copyBtn.textContent = '📋'
       copyBtn.title = '複製提示詞'
-      css(copyBtn, {
-        background:  'none',
-        border:      'none',
-        cursor:      'pointer',
-        fontSize:    '14px',
-        padding:     '2px',
-        opacity:     '0.6',
-        flexShrink:  '0',
-      })
+      st(copyBtn, 'background:none;border:none;cursor:pointer;font-size:14px;padding:2px;opacity:0.6;flex-shrink:0')
       copyBtn.addEventListener('click', function(e) {
         e.stopPropagation()
         navigator.clipboard.writeText(info.prompt).then(function() {
           copyBtn.textContent = '✅'
           setTimeout(function() { copyBtn.textContent = '📋' }, 1500)
         }).catch(function() {
-          // Fallback for older browsers
           const ta = document.createElement('textarea')
           ta.value = info.prompt
-          ta.style.position = 'fixed'
-          ta.style.opacity = '0'
+          ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0'
           document.body.appendChild(ta)
           ta.select()
           document.execCommand('copy')
@@ -166,26 +149,18 @@ export function openLightbox(url, info = {}) {
       panel.appendChild(promptWrap)
     }
 
-    // ── Model row
+    // Model row
     if (info.model) {
       const modelWrap = document.createElement('div')
-      css(modelWrap, { display: 'flex', alignItems: 'center', gap: '6px' })
+      st(modelWrap, 'display:flex;align-items:center;gap:6px')
 
       const modelLabel = document.createElement('span')
       modelLabel.textContent = '模型'
-      css(modelLabel, { fontSize: '10px', color: 'rgba(255,255,255,0.3)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em' })
+      st(modelLabel, 'font-size:10px;color:rgba(255,255,255,0.3);font-weight:600;text-transform:uppercase;letter-spacing:0.06em')
 
       const modelBadge = document.createElement('span')
       modelBadge.textContent = info.model
-      css(modelBadge, {
-        fontSize:     '11px',
-        color:        '#c8ff3e',
-        background:   'rgba(200,255,62,0.1)',
-        border:       '1px solid rgba(200,255,62,0.2)',
-        borderRadius: '6px',
-        padding:      '2px 8px',
-        fontWeight:   '600',
-      })
+      st(modelBadge, 'font-size:11px;color:#c8ff3e;background:rgba(200,255,62,0.1);border:1px solid rgba(200,255,62,0.2);border-radius:6px;padding:2px 8px;font-weight:600')
 
       modelWrap.appendChild(modelLabel)
       modelWrap.appendChild(modelBadge)
@@ -193,93 +168,60 @@ export function openLightbox(url, info = {}) {
     }
   }
 
-  // ── Action buttons
+  /* ── Action buttons ─────────────────────────────── */
   const btnRow = document.createElement('div')
-  css(btnRow, {
-    display:       'flex',
-    gap:           '8px',
-    paddingTop:    hasInfo ? '4px' : '14px',
-    paddingBottom: '0',
-    paddingLeft:   hasInfo ? '0' : '0',
-  })
+  st(btnRow, 'display:flex;gap:8px;padding-top:' + (hasInfo ? '4px' : '14px'))
 
-  // Copy to generator (only if prompt)
+  // Copy to generator (only if prompt exists)
   if (info.prompt) {
     const toGenBtn = document.createElement('button')
     toGenBtn.textContent = '⚡ 複製到生成器'
-    css(toGenBtn, {
-      flex:         '1',
-      background:   '#c8ff3e',
-      color:        '#000',
-      fontWeight:   '800',
-      fontSize:     '13px',
-      padding:      '10px 0',
-      borderRadius: '10px',
-      border:       'none',
-      cursor:       'pointer',
-      fontFamily:   'inherit',
-    })
+    st(toGenBtn, 'flex:1;background:#c8ff3e;color:#000;font-weight:800;font-size:13px;padding:10px 0;border-radius:10px;border:none;cursor:pointer;font-family:inherit')
     toGenBtn.addEventListener('click', function(e) {
       e.stopPropagation()
-      // Copy prompt to clipboard then navigate to generator
       const doNav = function() {
-        const encoded = encodeURIComponent(info.prompt)
-        window.location.href = '/generate?prompt=' + encoded
+        window.location.href = '/generate?prompt=' + encodeURIComponent(info.prompt)
       }
       navigator.clipboard.writeText(info.prompt).then(doNav).catch(doNav)
     })
     btnRow.appendChild(toGenBtn)
   }
 
-  // Download
+  // Download button
   const dlBtn = document.createElement('a')
-  dlBtn.href                 = url
-  dlBtn.download             = 'goblin-ai.jpg'
-  dlBtn.target               = '_blank'
-  dlBtn.rel                  = 'noreferrer'
-  dlBtn.textContent          = '⬇'
-  dlBtn.title                = '下載原圖'
-  css(dlBtn, {
-    display:        'flex',
-    alignItems:     'center',
-    justifyContent: 'center',
-    width:          info.prompt ? '42px' : 'auto',
-    flex:           info.prompt ? 'none' : '1',
-    padding:        info.prompt ? '10px 0' : '10px 0',
-    background:     'rgba(255,255,255,0.1)',
-    color:          '#fff',
-    fontWeight:     '700',
-    fontSize:       info.prompt ? '16px' : '13px',
-    borderRadius:   '10px',
-    textDecoration: 'none',
-    border:         '1px solid rgba(255,255,255,0.15)',
-    cursor:         'pointer',
-    boxSizing:      'border-box',
-  })
-  if (!info.prompt) dlBtn.textContent = '⬇  下載原圖'
+  dlBtn.href      = url
+  dlBtn.download  = 'goblin-ai.jpg'
+  dlBtn.target    = '_blank'
+  dlBtn.rel       = 'noreferrer'
+  dlBtn.title     = '下載原圖'
+  dlBtn.textContent = info.prompt ? '⬇' : '⬇  下載原圖'
+  st(dlBtn, [
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    info.prompt ? 'width:42px' : 'flex:1',
+    'padding:10px 0',
+    'background:rgba(255,255,255,0.1)',
+    'color:#fff',
+    'font-weight:700',
+    info.prompt ? 'font-size:16px' : 'font-size:13px',
+    'border-radius:10px',
+    'text-decoration:none',
+    'border:1px solid rgba(255,255,255,0.15)',
+    'cursor:pointer',
+    'box-sizing:border-box',
+  ].join(';'))
   dlBtn.addEventListener('click', function(e) { e.stopPropagation() })
   btnRow.appendChild(dlBtn)
 
   // Close button
   const clBtn = document.createElement('button')
-  clBtn.textContent    = '✕'
-  css(clBtn, {
-    width:       '42px',
-    background:  'rgba(255,255,255,0.07)',
-    color:       'rgba(255,255,255,0.6)',
-    fontWeight:  '700',
-    fontSize:    '16px',
-    padding:     '10px 0',
-    borderRadius:'10px',
-    border:      '1px solid rgba(255,255,255,0.1)',
-    cursor:      'pointer',
-    fontFamily:  'inherit',
-  })
+  clBtn.textContent = '✕'
+  st(clBtn, 'width:42px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.6);font-weight:700;font-size:16px;padding:10px 0;border-radius:10px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;font-family:inherit')
   clBtn.addEventListener('click', function(e) { e.stopPropagation(); close() })
   btnRow.appendChild(clBtn)
 
   panel.appendChild(btnRow)
-
   card.appendChild(img)
   card.appendChild(panel)
   backdrop.appendChild(card)
