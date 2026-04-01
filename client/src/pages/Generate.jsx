@@ -61,114 +61,47 @@ const MODELS = [
   { id: 'deliberate-v2',    name: 'Deliberate V2',      desc: '多風格混合' },
 ]
 
-// ── 完整模型分類（含 69 個 SEXY.AI / NovitaAI 模型）──────────────
+// ── 模型分類（已從 NovitaAI /v3/model API 確認可用）────────────────
 const MODEL_CATEGORIES = [
   {
     id: 'flux', label: 'FLUX（推薦）', emoji: '⚡',
     models: [
-      { id: 'flux-schnell',   name: 'FLUX Schnell',   desc: '最快速 · 免費推薦', badge: '推薦' },
-      { id: 'flux-dev',       name: 'FLUX Dev',        desc: '高品質細節' },
-      { id: 'flux-1.1-pro',   name: 'FLUX 1.1 Pro',   desc: '頂級 · 最新',      badge: 'PRO' },
+      { id: 'flux-schnell',   name: 'FLUX Schnell',  desc: '最快速 · 免費推薦', badge: '推薦' },
+      { id: 'flux-dev',       name: 'FLUX Dev',       desc: '高品質細節' },
+      { id: 'flux-1.1-pro',   name: 'FLUX 1.1 Pro',  desc: '頂級 · 最新',      badge: 'PRO' },
     ]
   },
   {
     id: 'general', label: '寫實 / 通用', emoji: '📸',
     models: [
-      { id: 'sdxl',                        name: 'SDXL',                    desc: '通用多風格' },
-      { id: 'realistic-vision',            name: 'Realistic Vision',        desc: '攝影寫實人像' },
-      { id: 'deliberate-v2',               name: 'Deliberate V2',           desc: '多風格混合' },
-      { id: 'novita-dreamshaper',          name: 'Dreamshaper 8',           desc: '夢幻細節', badge: 'HOT' },
-      { id: 'novita-chillout-mix',         name: 'ChilloutMix',             desc: '亞洲寫實美女', badge: 'HOT' },
-      { id: 'novita-deliberate',           name: 'Deliberate v2',           desc: '精細寫實' },
-      { id: 'novita-cyber-realistic',      name: 'CyberRealistic',          desc: '賽博寫實風格' },
-      { id: 'novita-cyber-realistic-revamp', name: 'CyberRealistic Revamp', desc: '升級寫實版' },
-      { id: 'novita-epic-photo',           name: 'Epic Photogasm X++',      desc: '超高清人像' },
-      { id: 'novita-epic-photo-v3',        name: 'Epic Photogasm V3',       desc: '攝影級畫質' },
-      { id: 'novita-epic-natural',         name: 'Epic Natural Beautiful',  desc: '自然美感' },
-      { id: 'novita-epic-realism',         name: 'Epic Realism',            desc: '超寫實自然光' },
-      { id: 'novita-photography',          name: 'Photography',             desc: '攝影風格' },
-      { id: 'novita-photon',               name: 'Photon',                  desc: '光感寫實' },
-      { id: 'novita-ghost-mix',            name: 'GhostMix',                desc: '鬼混風格' },
-      { id: 'novita-grounded-realistic',   name: 'Grounded Realistic Mix',  desc: '接地氣寫實' },
-      { id: 'novita-realistic-vision-v4',  name: 'Realistic Vision V4',     desc: '寫實人像 V4' },
-      { id: 'novita-realistic-vision-v5',  name: 'Realistic Vision V5',     desc: '寫實人像 V5' },
-      { id: 'novita-real-dream',           name: 'Real Dream',              desc: '夢幻寫實' },
-      { id: 'novita-reliberate',           name: 'Reliberate V2.4',         desc: '解放創意' },
-      { id: 'novita-rev-animated',         name: 'Rev Animated',            desc: '動畫風寫實' },
-      { id: 'novita-urpm',                 name: 'URPM',                    desc: '終極寫實人像' },
-      { id: 'novita-uhd',                  name: 'UHD 2.3',                 desc: '超高清細節' },
-      { id: 'novita-sd15',                 name: 'SD 1.5',                  desc: '基礎穩定擴散' },
-      { id: 'novita-lazymix',              name: 'LazyMix Real Amateur',    desc: '業餘寫實感' },
-      { id: 'novita-babes-v2',             name: 'Babes V2',                desc: '美女專用模型' },
-      { id: 'novita-experience',           name: 'Experience V2',           desc: '生活感寫實' },
-      { id: 'novita-bom',                  name: 'BoM',                     desc: '精緻混合' },
-      { id: 'novita-art-universe',         name: 'Art Universe',            desc: '藝術宇宙' },
+      { id: 'novita-realistic-vision', name: 'Realistic Vision V4',    desc: '寫實人像（支援 NSFW）', badge: 'HOT' },
+      { id: 'novita-good-hands',       name: 'Good Hands Beta2',       desc: '手部細節優化寫實' },
+      { id: 'novita-epic-realism',     name: 'Epic Realism',           desc: '超寫實自然光', badge: 'HOT' },
+      { id: 'novita-realistic-afmix',  name: 'Realistic AfMix',        desc: '非洲混血寫實風' },
+      { id: 'novita-epic-photo-xpp',   name: 'Epic Photogasm X++',     desc: '超高清攝影人像' },
+      { id: 'novita-epic-photo-x',     name: 'Epic Photogasm X',       desc: '攝影級畫質' },
+      { id: 'novita-majicmix',         name: 'Majic Mix Realistic v6', desc: '魔幻寫實混合' },
+      { id: 'novita-sdxl',             name: 'SDXL Base 1.0',          desc: '通用高解析度基礎模型' },
     ]
   },
   {
-    id: 'anime', label: '動漫 / 卡通', emoji: '🎌',
+    id: 'anime', label: '動漫 / 插畫', emoji: '🎌',
     models: [
-      { id: 'anything-v5',                name: 'Anything V5',              desc: '日系動漫', badge: 'HOT' },
-      { id: 'dreamshaper-xl',             name: 'Dreamshaper XL',           desc: '奇幻插畫' },
-      { id: 'novita-anime',               name: 'MeinaMix Meina V11',       desc: '精美動漫', badge: 'HOT' },
-      { id: 'novita-anime-characters',    name: 'Anime Characters',         desc: '二次元角色' },
-      { id: 'novita-anything-v5',         name: 'Anything V5 (Novita)',     desc: '日系動漫' },
-      { id: 'novita-hassaku-hentai',      name: 'Hassaku Hentai',           desc: '日系成人動漫', badge: '18+' },
-      { id: 'novita-hentai-v2',           name: 'Hentai Diffusion V2',      desc: '成人動漫 V2',  badge: '18+' },
-      { id: 'novita-hardcore-hentai',     name: 'Hardcore Hentai',          desc: '重口成人動漫', badge: '18+' },
-      { id: 'novita-pony-diffusion',      name: 'Pony Diffusion XL V6',     desc: '彩虹小馬風格', badge: 'NSFW' },
-      { id: 'novita-dreamshaper-pixel',   name: 'Dreamshaper XL Lightning', desc: '快速動漫生成' },
-      { id: 'novita-real-cartoon-3d',     name: 'Real Cartoon 3D',          desc: '3D卡通寫實' },
-      { id: 'novita-toon-universe',       name: 'Toon Universe',            desc: '卡通宇宙風格' },
-      { id: 'novita-fantasy-mix',         name: 'Fantasy Mix',              desc: '奇幻動漫混合' },
-      { id: 'novita-porn-cartoon',        name: 'Porn Cartoon',             desc: '成人卡通',     badge: '18+' },
+      { id: 'novita-meina-hentai',  name: 'Meina Hentai V4',  desc: '日系成人動漫', badge: '18+' },
+      { id: 'novita-rev-animated',  name: 'Rev Animated',     desc: '動畫混合風格' },
     ]
   },
   {
     id: 'adult', label: '成人 / 寫實 18+', emoji: '🔞',
     models: [
-      { id: 'novita-abyss-orange-mix',    name: 'AbyssOrangeMix2 SFW',      desc: '深淵橙色混合' },
-      { id: 'novita-porn-merge',          name: 'Porn Master Pro',          desc: '成人專業版',   badge: '18+' },
-      { id: 'novita-porn-ultimate',       name: 'Porn Ultimate V3',         desc: '成人終極版',   badge: '18+' },
-      { id: 'novita-buxom-brits',         name: 'Buxom Brits',              desc: '英式豐腴風',   badge: '18+' },
-      { id: 'novita-clear-bondage',       name: 'Clear Bondage',            desc: '束縛風格',     badge: '18+' },
-      { id: 'novita-latex-vision',        name: 'Latex Vision',             desc: '乳膠服飾',     badge: '18+' },
-      { id: 'novita-vr-porn',             name: 'VR Porn V3',               desc: 'VR 成人風格',  badge: '18+' },
-      { id: 'novita-blowjob-safe',        name: 'Blowjob Safe',             desc: '口交場景模型', badge: '18+' },
-      { id: 'novita-blowbang-ultimate',   name: 'Blowbang Ultimate',        desc: '多人口交',     badge: '18+' },
-      { id: 'novita-doggystyle-safe',     name: 'Doggystyle Safe',          desc: '特殊體位模型', badge: '18+' },
-      { id: 'novita-missionary-safe',     name: 'Missionary Safe',          desc: '傳教士體位',   badge: '18+' },
-      { id: 'novita-titfuck',             name: 'Titfuck',                   desc: '胸部場景',     badge: '18+' },
-      { id: 'novita-futanari-diffusion',  name: 'Futanari Diffusion',       desc: '扶她成人風格', badge: '18+' },
-      { id: 'novita-gay-diffusion',       name: 'Gay Diffusion',            desc: '同性男性風格', badge: '18+' },
-      { id: 'novita-homoerotic',          name: 'Homoerotic',               desc: '男男情慾',     badge: '18+' },
-      { id: 'novita-homoerotic-unstable', name: 'Homoerotix Unstable',      desc: '男男情慾（不穩定）', badge: '18+' },
-      { id: 'novita-manly-nudes',         name: 'Manly Nudes',              desc: '男性裸體藝術', badge: '18+' },
-      { id: 'novita-virile-reality',      name: 'Virile Reality V3',        desc: '男性寫實',     badge: '18+' },
-      { id: 'novita-transformix',         name: 'Transformix',              desc: '變身幻想',     badge: '18+' },
+      { id: 'novita-porn-master',   name: 'Porn Master Pro V5', desc: '成人專業寫實', badge: '18+' },
+      { id: 'novita-breast-helper', name: 'My Breast Helper',   desc: '胸部細節增強',  badge: '18+' },
     ]
   },
   {
     id: 'furry', label: 'Furry / 獸人', emoji: '🐾',
     models: [
-      { id: 'novita-furry',               name: 'YiffyMix V34',             desc: '獸人通用', badge: 'NSFW' },
-      { id: 'novita-anime-furry',         name: 'Anime Furry',              desc: '動漫獸人', badge: 'NSFW' },
-      { id: 'novita-coconut-furry',       name: 'Coconut Furry Mix',        desc: '椰子獸人混合', badge: 'NSFW' },
-      { id: 'novita-pina-colada-furry',   name: 'Pina Colada Furry Mix',    desc: '鳳梨椰子獸人', badge: 'NSFW' },
-      { id: 'novita-persika-furry',       name: 'Persika Furry Realism',    desc: '寫實獸人', badge: 'NSFW' },
-      { id: 'novita-yiffy-mix',           name: 'YiffyMix (Alt)',           desc: '另類獸人', badge: 'NSFW' },
-      { id: 'novita-seel-real-furry',     name: 'SeelReal Furry',           desc: '真實獸人', badge: 'NSFW' },
-    ]
-  },
-  {
-    id: 'inpaint', label: 'Inpainting 專用', emoji: '🎭',
-    models: [
-      { id: 'novita-anything-inpainting',    name: 'Anything Inpainting',    desc: '動漫局部重繪' },
-      { id: 'novita-chillout-inpainting',    name: 'ChilloutMix Inpainting', desc: '寫實局部重繪' },
-      { id: 'novita-men-inpainting',         name: 'Men Inpainting',         desc: '男性局部重繪' },
-      { id: 'novita-photography-inpainting', name: 'Photography Inpainting', desc: '攝影局部重繪' },
-      { id: 'novita-sd15-inpainting',        name: 'SD 1.5 Inpainting',      desc: '基礎局部重繪' },
-      { id: 'novita-urpm-inpainting',        name: 'URPM Inpainting',        desc: '寫實人像重繪' },
+      { id: 'novita-furry', name: 'Lawlass Yiffymix 20 Furry', desc: '獸人通用', badge: 'NSFW' },
     ]
   },
 ]
@@ -213,7 +146,7 @@ export default function Generate() {
   const [prompt, setPrompt] = useState('')
   const [negativePrompt, setNegativePrompt] = useState('')
   const [style, setStyle] = useState('none')
-  const [model, setModel] = useState('flux-schnell')
+  const [model, setModel] = useState('novita-realistic-vision')
   const [quality, setQuality] = useState('standard')
   const [size, setSize] = useState(SIZES[0])
   const [strength, setStrength] = useState(0.7)
@@ -558,6 +491,17 @@ export default function Generate() {
             {/* 目前選中模型說明 */}
             {currentModelInfo && (
               <p className="text-[10px] text-white/25 mt-1.5 px-1">{currentModelInfo.desc}</p>
+            )}
+
+            {/* FLUX / Replicate 不支援 NSFW 警告 */}
+            {!model.startsWith('novita-') && (
+              <div className="mt-2 flex items-start gap-1.5 bg-yellow-500/8 border border-yellow-500/20 rounded-lg px-2.5 py-2">
+                <span className="text-yellow-400 text-xs shrink-0">⚠️</span>
+                <p className="text-[10px] text-yellow-400/80 leading-relaxed">
+                  此模型走 Replicate，<strong>不支援 NSFW 內容</strong>。<br />
+                  生成 18+ 圖片請選「📸 寫實/通用」或「🔞 成人/寫實」分類中的模型。
+                </p>
+              </div>
             )}
           </div>
         )}
