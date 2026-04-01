@@ -61,47 +61,38 @@ const MODELS = [
   { id: 'deliberate-v2',    name: 'Deliberate V2',      desc: '多風格混合' },
 ]
 
-// ── 模型分類（已從 NovitaAI /v3/model API 確認可用）────────────────
+// ── 模型分類（已逐一實測 NovitaAI txt2img 可用）──────────────────
 const MODEL_CATEGORIES = [
   {
-    id: 'flux', label: 'FLUX（推薦）', emoji: '⚡',
+    id: 'flux', label: 'FLUX（快速）', emoji: '⚡',
     models: [
-      { id: 'flux-schnell',   name: 'FLUX Schnell',  desc: '最快速 · 免費推薦', badge: '推薦' },
-      { id: 'flux-dev',       name: 'FLUX Dev',       desc: '高品質細節' },
-      { id: 'flux-1.1-pro',   name: 'FLUX 1.1 Pro',  desc: '頂級 · 最新',      badge: 'PRO' },
+      { id: 'flux-schnell',   name: 'FLUX Schnell',  desc: '最快速（不支援 NSFW）', badge: '推薦' },
+      { id: 'flux-dev',       name: 'FLUX Dev',       desc: '高品質細節（不支援 NSFW）' },
+      { id: 'flux-1.1-pro',   name: 'FLUX 1.1 Pro',  desc: '頂級畫質（不支援 NSFW）', badge: 'PRO' },
     ]
   },
   {
-    id: 'general', label: '寫實 / 通用', emoji: '📸',
+    id: 'general', label: '寫實 / 通用 ✅NSFW', emoji: '📸',
     models: [
-      { id: 'novita-realistic-vision', name: 'Realistic Vision V4',    desc: '寫實人像（支援 NSFW）', badge: 'HOT' },
-      { id: 'novita-good-hands',       name: 'Good Hands Beta2',       desc: '手部細節優化寫實' },
-      { id: 'novita-epic-realism',     name: 'Epic Realism',           desc: '超寫實自然光', badge: 'HOT' },
-      { id: 'novita-realistic-afmix',  name: 'Realistic AfMix',        desc: '非洲混血寫實風' },
-      { id: 'novita-epic-photo-xpp',   name: 'Epic Photogasm X++',     desc: '超高清攝影人像' },
-      { id: 'novita-epic-photo-x',     name: 'Epic Photogasm X',       desc: '攝影級畫質' },
-      { id: 'novita-majicmix',         name: 'Majic Mix Realistic v6', desc: '魔幻寫實混合' },
-      { id: 'novita-sdxl',             name: 'SDXL Base 1.0',          desc: '通用高解析度基礎模型' },
+      { id: 'novita-epic-realism',    name: 'Epic Realism',           desc: '超寫實自然光 · 推薦 NSFW', badge: '推薦' },
+      { id: 'novita-realistic-afmix', name: 'Realistic AfMix',        desc: '寫實混合風格' },
+      { id: 'novita-epic-photo-xpp',  name: 'Epic Photogasm X++',     desc: '超高清攝影人像' },
+      { id: 'novita-epic-photo-x',    name: 'Epic Photogasm X',       desc: '攝影級畫質' },
+      { id: 'novita-majicmix',        name: 'Majic Mix Realistic v6', desc: '魔幻寫實混合' },
+      { id: 'novita-sdxl',            name: 'SDXL Base 1.0',          desc: '通用高解析度' },
     ]
   },
   {
-    id: 'anime', label: '動漫 / 插畫', emoji: '🎌',
+    id: 'anime', label: '動漫 / 插畫 ✅NSFW', emoji: '🎌',
     models: [
-      { id: 'novita-meina-hentai',  name: 'Meina Hentai V4',  desc: '日系成人動漫', badge: '18+' },
-      { id: 'novita-rev-animated',  name: 'Rev Animated',     desc: '動畫混合風格' },
+      { id: 'novita-meina-hentai', name: 'Meina Hentai V4', desc: '日系成人動漫', badge: '18+' },
+      { id: 'novita-rev-animated', name: 'Rev Animated',    desc: '動畫混合風格' },
     ]
   },
   {
-    id: 'adult', label: '成人 / 寫實 18+', emoji: '🔞',
+    id: 'furry', label: 'Furry / 獸人 ✅NSFW', emoji: '🐾',
     models: [
-      { id: 'novita-porn-master',   name: 'Porn Master Pro V5', desc: '成人專業寫實', badge: '18+' },
-      { id: 'novita-breast-helper', name: 'My Breast Helper',   desc: '胸部細節增強',  badge: '18+' },
-    ]
-  },
-  {
-    id: 'furry', label: 'Furry / 獸人', emoji: '🐾',
-    models: [
-      { id: 'novita-furry', name: 'Lawlass Yiffymix 20 Furry', desc: '獸人通用', badge: 'NSFW' },
+      { id: 'novita-furry', name: 'Yiffymix Furry', desc: '獸人通用 · 支援 NSFW', badge: 'NSFW' },
     ]
   },
 ]
@@ -146,7 +137,7 @@ export default function Generate() {
   const [prompt, setPrompt] = useState('')
   const [negativePrompt, setNegativePrompt] = useState('')
   const [style, setStyle] = useState('none')
-  const [model, setModel] = useState('novita-realistic-vision')
+  const [model, setModel] = useState('novita-epic-realism')
   const [quality, setQuality] = useState('standard')
   const [size, setSize] = useState(SIZES[0])
   const [strength, setStrength] = useState(0.7)

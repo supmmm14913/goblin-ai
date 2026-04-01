@@ -50,11 +50,10 @@ const SD15_MODELS = new Set(['realistic-vision', 'anything-v5', 'deliberate-v2']
 // FLUX models (use aspect_ratio instead of width/height)
 const FLUX_MODELS  = new Set(['flux-schnell', 'flux-dev', 'flux-1.1-pro']);
 
-// ── NovitaAI 模型（已從 /v3/model API 確認可用的 checkpoint）────────
+// ── NovitaAI 模型（已逐一實測 txt2img 可用）────────────────────────
+// ❌ 排除：inpainting 模型（無法用於 txt2img）、LoRA（非 checkpoint）
 const NOVITA_MODELS = {
   // 寫實 / 通用
-  'novita-realistic-vision':   'realisticVisionV40_v40VAE-inpainting_81543.safetensors',
-  'novita-good-hands':         'GoodHands-beta2_39807.safetensors',
   'novita-epic-realism':       'epicrealism_naturalSinRC1VAE_106430.safetensors',
   'novita-realistic-afmix':    'realisticAfmix_realisticAfmix_75178.safetensors',
   'novita-epic-photo-xpp':     'epicphotogasm_xPlusPlus_135412.safetensors',
@@ -63,11 +62,8 @@ const NOVITA_MODELS = {
   // 動漫
   'novita-meina-hentai':       'meinahentai_v4_70340.safetensors',
   'novita-rev-animated':       'revAnimated_v122.safetensors',
-  // Furry
+  // Furry / NSFW
   'novita-furry':              'lawlassYiffymix20Furry_lawlasmixWithBakedIn_13264.safetensors',
-  // 成人
-  'novita-porn-master':        'pornmasterPro_fullV5-inpainting_135217.safetensors',
-  'novita-breast-helper':      'MyBreastHelperReducedRS_77310.safetensors',
   // SDXL
   'novita-sdxl':               'sd_xl_base_1.0.safetensors',
 };
@@ -84,16 +80,18 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
   const reqH = Math.min(Math.max(Math.round((height || 768) / 64) * 64, 256), maxRes);
 
   const body = {
-    model_name: modelName,
-    prompt,
-    negative_prompt: negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy',
-    width:  reqW,
-    height: reqH,
-    steps: 25,
-    cfg_scale: 7,
-    sampler_name: 'DPM++ 2M Karras',
-    image_num: 1,
-    seed: -1,
+    request: {
+      model_name: modelName,
+      prompt,
+      negative_prompt: negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy',
+      width:  reqW,
+      height: reqH,
+      steps: 25,
+      guidance_scale: 7,
+      sampler_name: 'DPM++ 2M Karras',
+      image_num: 1,
+      seed: -1,
+    }
   };
   console.log('[NovitaAI] 提交:', { model_name: modelName, width: reqW, height: reqH });
 
