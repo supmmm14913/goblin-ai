@@ -69,7 +69,7 @@ const NOVITA_MODELS = {
 };
 
 // NovitaAI 文字生成圖片（非同步輪詢，後端等待結果）
-async function novitaTextToImage(modelName, prompt, negativePrompt, width, height) {
+async function novitaTextToImage(modelName, prompt, negativePrompt, width, height, count = 1) {
   const apiKey = process.env.NOVITA_API_KEY;
   if (!apiKey) throw new Error('NOVITA_API_KEY 未設定，請至 Railway 環境變數新增');
 
@@ -92,8 +92,8 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
       height: reqH,
       steps: 25,
       guidance_scale: 7,
-      sampler_name: 'DPM++ 2M Karras',
-      image_num: 1,
+      sampler_name: 'Euler a',
+      image_num: Math.min(Math.max(count, 1), 8),
       seed: -1,
     }
   };
@@ -112,8 +112,9 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
   }
   const { task_id } = await submitRes.json();
 
-  // 輪詢結果（每 3 秒，最多 3 分鐘）
-  for (let i = 0; i < 60; i++) {
+  // 輪詢結果（每 3 秒，最多 5 分鐘，批量圖片需要更長時間）
+  const maxPolls = 20 + count * 10; // 1張=30次(90s)，8張=100次(300s)
+  for (let i = 0; i < maxPolls; i++) {
     await new Promise(r => setTimeout(r, 3000));
     const pollRes = await fetch(`https://api.novita.ai/v3/async/task-result?task_id=${task_id}`, {
       headers: { 'Authorization': `Bearer ${apiKey}` },
@@ -122,9 +123,9 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
     const data = await pollRes.json();
     const status = data.task?.status;
     if (status === 'TASK_STATUS_SUCCEED') {
-      const url = data.images?.[0]?.image_url;
-      if (!url) throw new Error('NovitaAI：未返回圖片 URL');
-      return url;
+      const urls = (data.images || []).map(img => img.image_url).filter(Boolean);
+      if (!urls.length) throw new Error('NovitaAI：未返回圖片 URL');
+      return urls; // 回傳 URL 陣列
     }
     if (status === 'TASK_STATUS_FAILED') {
       const reason = data.task?.reason || data.task?.err_detail || JSON.stringify(data.task) || '未知錯誤';
@@ -132,7 +133,7 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
       throw new Error(`NovitaAI 生成失敗: ${reason}`);
     }
   }
-  throw new Error('NovitaAI 生成超時（3 分鐘），點數已退還');
+  throw new Error(`NovitaAI 生成超時，點數已退還`);
 }
 
 // 偵測是否含有中文字元
@@ -232,19 +233,22 @@ async function preparePrompt(prompt, style) {
   return enhancePrompt(p, style);
 }
 
-// 檢查並扣除點數的 middleware
+// 檢查並扣除點數的 middleware（支援批量生成）
 function checkCredits(type) {
   return async (req, res, next) => {
-    const cost = CREDIT_COST[type] || 2;
+    const base = CREDIT_COST[type] || 2;
+    const count = Math.min(Math.max(parseInt(req.body.image_count) || 1, 1), 8);
+    const cost = base * count;
     const user = await db.findOne('users', { id: req.user.id });
     if (!user || (user.credits || 0) < cost) {
       return res.status(402).json({
-        error: `點數不足！此操作需要 ${cost} 點，你目前有 ${user?.credits || 0} 點`,
+        error: `點數不足！此操作需要 ${cost} 點（${count} 張 × ${base} 點），你目前有 ${user?.credits || 0} 點`,
         credits: user?.credits || 0,
         required: cost
       });
     }
     req.creditCost = cost;
+    req.imageCount = count;
     next();
   };
 }
@@ -255,6 +259,8 @@ const COMMUNITY_MODEL_IDS = new Set(['sdxl', 'dreamshaper-xl', 'realistic-vision
 // 文字生成圖片
 router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), async (req, res) => {
   const { prompt, negative_prompt, width = 1024, height = 1024, style = 'none', quality = 'standard', model: reqModel = '' } = req.body;
+  const imageCount = req.imageCount || 1; // 批量數量（1~8）
+
   // NovitaAI / 社群模型直接使用；FLUX 系列走 quality 對應
   let model;
   if (reqModel in NOVITA_MODELS || COMMUNITY_MODEL_IDS.has(reqModel)) {
@@ -265,60 +271,76 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
   }
   if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
 
+  // 建立第一筆 processing 記錄
   const id = uuidv4();
   await db.insertOne('generations', {
     id, user_id: req.user.id, type: 'text-to-image',
     prompt, negative_prompt: negative_prompt || null, model,
     width, height, image_url: null, status: 'processing',
-    is_public: true,
-    credit_cost: req.creditCost,
+    is_public: true, credit_cost: req.creditCost,
     created_at: new Date().toISOString()
   });
 
-  // 扣點
+  // 扣點（已在 checkCredits 計算 count × base）
   const user = await db.findOne('users', { id: req.user.id });
   await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
 
   try {
     const finalPrompt = await preparePrompt(prompt, style);
-    // 合併負面提示詞
     const styleNeg = STYLE_NEGATIVE[style] || '';
     const fullNeg = [negative_prompt, styleNeg].filter(Boolean).join(', ');
 
-    // ── NovitaAI 分支（69 個 SEXY.AI 同款模型）────────────────
+    // ── NovitaAI 分支 ────────────────────────────────────────
     if (model in NOVITA_MODELS) {
-      const imageUrl = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height);
-      await db.updateOne('generations', { id }, { image_url: imageUrl, status: 'completed', prompt_en: finalPrompt });
+      const imageUrls = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount);
+      // 儲存第一張到原始 id，額外張各建一筆記錄
+      await db.updateOne('generations', { id }, { image_url: imageUrls[0], status: 'completed', prompt_en: finalPrompt });
+      for (let i = 1; i < imageUrls.length; i++) {
+        await db.insertOne('generations', {
+          id: uuidv4(), user_id: req.user.id, type: 'text-to-image',
+          prompt, negative_prompt: negative_prompt || null, model,
+          width, height, image_url: imageUrls[i], status: 'completed',
+          is_public: true, credit_cost: 0, prompt_en: finalPrompt,
+          created_at: new Date().toISOString()
+        });
+      }
       const updatedUser = await db.findOne('users', { id: req.user.id });
-      return res.json({ id, image_url: imageUrl, status: 'completed', credits: updatedUser.credits });
+      return res.json({ id, image_url: imageUrls[0], image_urls: imageUrls, status: 'completed', credits: updatedUser.credits });
     }
 
+    // ── Replicate 分支 ────────────────────────────────────────
     const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
     const modelId = MODELS[model] || MODELS['flux-schnell'];
     let input = { prompt: finalPrompt };
     if (FLUX_MODELS.has(model)) {
       input.aspect_ratio = getAspectRatio(width, height);
+      input.num_outputs = imageCount;
     } else {
       const maxRes = SD15_MODELS.has(model) ? 768 : 1024;
       input.width  = Math.min(width,  maxRes);
       input.height = Math.min(height, maxRes);
       if (fullNeg) input.negative_prompt = fullNeg;
-      input.guidance_scale       = 7.5;
-      input.num_inference_steps  = SD15_MODELS.has(model) ? 30 : 25;
-      input.num_outputs           = 1;
+      input.guidance_scale      = 7.5;
+      input.num_inference_steps = SD15_MODELS.has(model) ? 30 : 25;
+      input.num_outputs         = imageCount;
     }
 
-    // 更新記錄儲存翻譯後的提示詞
     await db.updateOne('generations', { id }, { prompt_en: finalPrompt });
-
     const output = await replicate.run(modelId, { input });
-    const imageUrl = Array.isArray(output) ? output[0] : String(output);
+    const imageUrls = Array.isArray(output) ? output.map(String) : [String(output)];
 
-    await db.updateOne('generations', { id }, { image_url: imageUrl, status: 'completed' });
+    await db.updateOne('generations', { id }, { image_url: imageUrls[0], status: 'completed' });
+    for (let i = 1; i < imageUrls.length; i++) {
+      await db.insertOne('generations', {
+        id: uuidv4(), user_id: req.user.id, type: 'text-to-image',
+        prompt, model, width, height, image_url: imageUrls[i], status: 'completed',
+        is_public: true, credit_cost: 0, created_at: new Date().toISOString()
+      });
+    }
     const updatedUser = await db.findOne('users', { id: req.user.id });
-    res.json({ id, image_url: imageUrl, status: 'completed', credits: updatedUser.credits });
+    res.json({ id, image_url: imageUrls[0], image_urls: imageUrls, status: 'completed', credits: updatedUser.credits });
+
   } catch (err) {
-    // 生成失敗退還點數
     const u = await db.findOne('users', { id: req.user.id });
     await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
     await db.updateOne('generations', { id }, { status: 'failed' });

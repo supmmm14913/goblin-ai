@@ -152,6 +152,8 @@ export default function Generate() {
   const [videoModel, setVideoModel] = useState('kling-v3')
   const [maskImage, setMaskImage] = useState(null)
   const [maskPreview, setMaskPreview] = useState(null)
+  const [imageCount, setImageCount] = useState(1)
+  const [results, setResults] = useState([]) // 批量結果
 
   const onDrop = useCallback((files) => {
     const file = files[0]; if (!file) return
@@ -183,8 +185,9 @@ export default function Generate() {
   const activeStyles = isVideo ? VIDEO_STYLES : STYLES
   const currentStyle = activeStyles.find(s => s.id === style) || activeStyles[0]
   const currentQuality = QUALITY_LEVELS.find(q => q.id === quality) || QUALITY_LEVELS[0]
-  // 實際消耗點數：圖片用品質等級，影片固定 5 點
-  const actualCost = isImage ? currentQuality.cost : currentTab.cost
+  // 實際消耗點數：圖片 = 品質點數 × 張數，影片固定 5 點
+  const baseCost = isImage ? currentQuality.cost : currentTab.cost
+  const actualCost = isImage ? baseCost * imageCount : baseCost
 
   const examples = EXAMPLE_PROMPTS[style] || EXAMPLE_PROMPTS.none
 
@@ -201,10 +204,11 @@ export default function Generate() {
       return toast.error(`點數不足！需要 ${actualCost} 點，目前剩 ${user?.credits ?? 0} 點`)
     }
 
-    setLoading(true); setResult(null); setLoadingProgress(0)
+    setLoading(true); setResult(null); setResults([]); setLoadingProgress(0)
     const hasChinese = /[\u4e00-\u9fff]/.test(prompt)
     const isNovita = model.startsWith('novita-')
-    setLoadingMsg(hasChinese ? '🌐 偵測到中文，正在翻譯...' : isVideo ? '📤 提交影片任務...' : isNovita ? '🎨 NovitaAI 生成中（約 30-90 秒）...' : '✨ 生成中...')
+    const countLabel = isImage && imageCount > 1 ? ` × ${imageCount} 張` : ''
+    setLoadingMsg(hasChinese ? '🌐 偵測到中文，正在翻譯...' : isVideo ? '📤 提交影片任務...' : isNovita ? `🎨 NovitaAI 生成中${countLabel}（約 ${imageCount * 30}-${imageCount * 90} 秒）...` : `✨ 生成中${countLabel}...`)
 
     // Optimistic credit deduction
     const previousCredits = user?.credits ?? 0
@@ -218,11 +222,12 @@ export default function Generate() {
       if (tab === 'text-image') {
         const res = await axios.post('/generate/text-to-image', {
           prompt: styledPrompt, negative_prompt: negativePrompt,
-          model, width: size.w, height: size.h, style, quality
+          model, width: size.w, height: size.h, style, quality, image_count: imageCount
         })
-        setResult(res.data.image_url); setResultType('image')
+        const urls = res.data.image_urls || [res.data.image_url]
+        setResults(urls); setResult(urls[0]); setResultType('image')
         if (res.data.credits !== undefined) updateCredits(res.data.credits)
-        toast.success('圖片生成成功！')
+        toast.success(urls.length > 1 ? `成功生成 ${urls.length} 張圖片！` : '圖片生成成功！')
         setLoading(false); setLoadingMsg('')
 
       } else if (tab === 'image-image') {
@@ -599,13 +604,32 @@ export default function Generate() {
           )}
         </div>
 
+        {/* 批量生成選擇器（僅圖片）*/}
+        {isImage && (
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-white/40 shrink-0">生成張數</label>
+            <div className="flex gap-1.5 flex-1">
+              {[1, 2, 4, 8].map(n => (
+                <button key={n} onClick={() => setImageCount(n)} disabled={loading}
+                  className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${imageCount === n ? 'border-[#c8ff3e]/60 bg-[#c8ff3e]/10 text-[#c8ff3e]' : 'border-white/10 bg-white/5 text-white/40 hover:border-white/20 hover:text-white/70'}`}>
+                  {n === 1 ? '× 1' : `× ${n}`}
+                </button>
+              ))}
+            </div>
+            {imageCount > 1 && (
+              <span className="text-xs text-white/30 shrink-0">{baseCost}×{imageCount}</span>
+            )}
+          </div>
+        )}
+
         {/* 生成按鈕 */}
         <button onClick={handleGenerate} disabled={loading}
           className="btn-neon w-full flex items-center justify-center gap-2 py-3 text-sm font-black">
           {loading ? (
             <><span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />{loadingMsg}</>
           ) : (
-            <><Wand2 size={15} />生成 · {actualCost} 點
+            <><Wand2 size={15} />
+              生成{isImage && imageCount > 1 ? ` ${imageCount} 張` : ''} · {actualCost} 點
               {isImage && quality !== 'standard' && <span className="opacity-70 text-xs">({currentQuality.emoji}{currentQuality.label})</span>}
               {style !== 'none' && <span className="opacity-70 text-xs">({currentStyle.emoji}{currentStyle.label})</span>}
             </>
@@ -643,27 +667,66 @@ export default function Generate() {
           </div>
         ) : result ? (
           <div className="flex-1 flex flex-col">
-            {/* 風格標籤 */}
-            {style !== 'none' && (
-              <div className="px-4 pt-3 flex items-center gap-2">
+            {/* 標題列 */}
+            <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
+              {style !== 'none' && (
                 <span className="text-xs px-2 py-1 rounded-full border" style={{borderColor:'rgba(200,255,62,0.3)',color:'#c8ff3e',background:'rgba(200,255,62,0.08)'}}>
                   {currentStyle.emoji} {currentStyle.label}
                 </span>
-              </div>
-            )}
-            <div className="flex-1 relative bg-black flex items-center justify-center p-2" style={{ minHeight: '300px' }}>
+              )}
+              {results.length > 1 && (
+                <span className="text-xs px-2 py-1 rounded-full bg-white/8 text-white/50 border border-white/10">
+                  {results.length} 張圖片
+                </span>
+              )}
+            </div>
+
+            {/* 圖片 Grid */}
+            <div className={`flex-1 p-2 overflow-y-auto ${results.length > 1 ? 'grid gap-2 ' + (results.length === 2 ? 'grid-cols-2' : 'grid-cols-2') : 'flex items-center justify-center bg-black'}`}
+              style={{ minHeight: '300px' }}>
               {resultType === 'video' ? (
                 <video src={result} controls autoPlay className="max-w-full max-h-full rounded-xl" />
+              ) : results.length > 1 ? (
+                results.map((url, i) => (
+                  <div key={i} className="relative group aspect-square bg-black rounded-xl overflow-hidden">
+                    <img src={url} alt={`生成結果 ${i + 1}`} className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <a href={url} download target="_blank" rel="noreferrer"
+                        className="bg-[#c8ff3e] text-black text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
+                        <Download size={11} />下載
+                      </a>
+                    </div>
+                    <span className="absolute top-1.5 left-1.5 bg-black/60 text-white/60 text-[9px] px-1.5 py-0.5 rounded">#{i + 1}</span>
+                  </div>
+                ))
               ) : (
                 <img src={result} alt="生成結果" className="max-w-full max-h-full object-contain rounded-xl" />
               )}
             </div>
+
             <div className="p-4 border-t border-white/8 flex gap-2">
-              <a href={result} download target="_blank" rel="noreferrer"
-                className="btn-neon flex items-center gap-2 flex-1 justify-center py-2.5 text-sm">
-                <Download size={14} />{resultType === 'video' ? '下載影片' : '下載圖片'}
-              </a>
-              <button onClick={() => setResult(null)} className="btn-secondary py-2.5 px-4 text-sm">再生成</button>
+              {results.length > 1 ? (
+                <>
+                  <button onClick={async () => {
+                    for (let i = 0; i < results.length; i++) {
+                      const a = document.createElement('a'); a.href = results[i]
+                      a.download = `goblin-ai-${i+1}.jpg`; a.target = '_blank'; a.click()
+                      await new Promise(r => setTimeout(r, 300))
+                    }
+                  }} className="btn-neon flex items-center gap-2 flex-1 justify-center py-2.5 text-sm">
+                    <Download size={14} />下載全部 ({results.length} 張)
+                  </button>
+                  <button onClick={() => { setResult(null); setResults([]) }} className="btn-secondary py-2.5 px-4 text-sm">再生成</button>
+                </>
+              ) : (
+                <>
+                  <a href={result} download target="_blank" rel="noreferrer"
+                    className="btn-neon flex items-center gap-2 flex-1 justify-center py-2.5 text-sm">
+                    <Download size={14} />{resultType === 'video' ? '下載影片' : '下載圖片'}
+                  </a>
+                  <button onClick={() => { setResult(null); setResults([]) }} className="btn-secondary py-2.5 px-4 text-sm">再生成</button>
+                </>
+              )}
             </div>
           </div>
         ) : (
