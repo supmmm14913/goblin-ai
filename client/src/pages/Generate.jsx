@@ -410,6 +410,7 @@ export default function Generate() {
   }
 
   return (
+    <>
     <div className="flex gap-4 h-[calc(100vh-120px)]">
 
       {/* ── 左側控制面板 ─────────────────────────────── */}
@@ -935,5 +936,6 @@ export default function Generate() {
       </div>,
       document.body
     )}
+    </>
   )
 }
