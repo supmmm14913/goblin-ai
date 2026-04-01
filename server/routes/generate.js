@@ -79,11 +79,15 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
   const reqW = Math.min(Math.max(Math.round((width  || 512) / 64) * 64, 256), maxRes);
   const reqH = Math.min(Math.max(Math.round((height || 768) / 64) * 64, 256), maxRes);
 
+  // NovitaAI 限制 prompt ≤ 1024 字元
+  const safePrompt = prompt.length > 1024 ? prompt.slice(0, 1024) : prompt;
+  if (prompt.length > 1024) console.warn(`[NovitaAI] 提詞過長 (${prompt.length})，已截斷至 1024`);
+
   const body = {
     request: {
       model_name: modelName,
-      prompt,
-      negative_prompt: negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy',
+      prompt: safePrompt,
+      negative_prompt: (negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy').slice(0, 512),
       width:  reqW,
       height: reqH,
       steps: 25,

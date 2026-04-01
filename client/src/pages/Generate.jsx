@@ -389,7 +389,28 @@ export default function Generate() {
             </div>
             <textarea className="input-field resize-none" rows={3}
               placeholder={isVideo ? '描述你想要的影片內容，例如：海浪拍打礁石，夕陽西下...' : '描述你想要的圖片，例如：一個男孩在溜狗，背景是總統府...'}
-              value={prompt} onChange={e => setPrompt(e.target.value)} disabled={loading} />
+              value={prompt} onChange={e => setPrompt(e.target.value)} disabled={loading}
+              maxLength={1024} />
+            {/* 字數計數器 */}
+            {(() => {
+              const len = prompt.length
+              const limit = 1024
+              const remaining = limit - len
+              const pct = len / limit
+              const color = pct >= 1 ? '#ef4444' : pct >= 0.9 ? '#f97316' : pct >= 0.75 ? '#eab308' : 'rgba(255,255,255,0.2)'
+              return (
+                <div className="flex justify-end items-center mt-1 gap-1.5">
+                  {pct >= 0.75 && (
+                    <span style={{ color, fontSize: 10 }}>
+                      {pct >= 1 ? '⛔ 已達上限！' : `⚠️ 還剩 ${remaining} 字`}
+                    </span>
+                  )}
+                  <span style={{ color, fontSize: 10, fontVariantNumeric: 'tabular-nums' }}>
+                    {len} / {limit}
+                  </span>
+                </div>
+              )
+            })()}
 
             {/* 範例提示詞 */}
             <div className="flex flex-wrap gap-1.5 mt-2">
@@ -548,7 +569,15 @@ export default function Generate() {
                   <label className="text-xs text-white/40 mb-1.5 block">負面提示詞（排除不想要的元素）</label>
                   <textarea className="input-field resize-none text-xs" rows={2}
                     placeholder="blurry, ugly, low quality, watermark, extra fingers..."
-                    value={negativePrompt} onChange={e => setNegativePrompt(e.target.value)} disabled={loading} />
+                    value={negativePrompt} onChange={e => setNegativePrompt(e.target.value)} disabled={loading}
+                    maxLength={512} />
+                  {negativePrompt.length > 384 && (
+                    <div className="flex justify-end mt-0.5">
+                      <span style={{ color: negativePrompt.length >= 512 ? '#ef4444' : '#f97316', fontSize: 10 }}>
+                        {negativePrompt.length} / 512
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
               {tab === 'image-image' && (
