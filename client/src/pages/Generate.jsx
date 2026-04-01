@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useDropzone } from 'react-dropzone'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
@@ -6,58 +7,63 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Upload, X, Download, Settings, ChevronDown, ChevronUp, Coins, Wand2, Shuffle } from 'lucide-react'
 
-// ── 圖片格子元件（全 inline style，避免 Tailwind JIT purge）────────
+// ── 圖片格子元件（全 inline style，Portal lightbox）────────────
 function GridImageCard({ url, index, isPublished, canReward, onZoom, onPublish }) {
   const [hovered, setHovered] = useState(false)
+
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      style={{ position: 'relative', aspectRatio: '1/1', background: '#000', borderRadius: '12px', overflow: 'hidden', cursor: 'zoom-in' }}>
-      {/* 圖片：雙擊放大 */}
-      <img src={url} alt={`#${index + 1}`}
-        onDoubleClick={onZoom}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+      onDoubleClick={onZoom}
+      title="雙擊放大"
+      style={{ position: 'relative', aspectRatio: '1/1', background: '#000', borderRadius: '12px', overflow: 'hidden', cursor: 'zoom-in', userSelect: 'none' }}>
 
-      {/* 編號標籤（常駐）*/}
-      <span style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.65)', color: 'rgba(255,255,255,0.7)', fontSize: 10, padding: '2px 6px', borderRadius: 4 }}>
+      <img src={url} alt={`#${index + 1}`}
+        draggable={false}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', pointerEvents: 'none' }} />
+
+      {/* 編號（常駐）*/}
+      <span style={{ position: 'absolute', top: 6, left: 6, background: 'rgba(0,0,0,0.7)', color: 'rgba(255,255,255,0.8)', fontSize: 10, padding: '2px 6px', borderRadius: 4, pointerEvents: 'none' }}>
         #{index + 1}
+      </span>
+
+      {/* 放大圖示（常駐右上）*/}
+      <span onClick={e => { e.stopPropagation(); onZoom() }}
+        style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 12, width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: hovered ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+        🔍
       </span>
 
       {/* 已公開標籤 */}
       {isPublished && (
-        <span style={{ position: 'absolute', top: 6, right: 6, background: '#c8ff3e', color: '#000', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4 }}>
+        <span style={{ position: 'absolute', top: 6, right: 34, background: '#c8ff3e', color: '#000', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, pointerEvents: 'none' }}>
           已公開
         </span>
       )}
 
-      {/* Hover 操作列（底部滑出）*/}
+      {/* Hover 底部操作列 */}
       <div style={{
         position: 'absolute', left: 0, right: 0, bottom: 0,
-        background: 'linear-gradient(transparent, rgba(0,0,0,0.85))',
-        padding: '20px 8px 8px',
+        background: 'linear-gradient(transparent, rgba(0,0,0,0.88))',
+        padding: '24px 8px 8px',
         display: 'flex', flexDirection: 'column', gap: 4,
-        transform: hovered ? 'translateY(0)' : 'translateY(100%)',
-        transition: 'transform 0.2s ease',
+        opacity: hovered ? 1 : 0,
+        transform: hovered ? 'translateY(0)' : 'translateY(8px)',
+        transition: 'opacity 0.2s, transform 0.2s',
       }}>
-        {/* 雙擊提示 + 放大 / 下載 */}
         <div style={{ display: 'flex', gap: 4 }}>
-          <button onMouseDown={e => { e.preventDefault(); onZoom() }}
-            style={{ flex: 1, background: 'rgba(255,255,255,0.18)', color: '#fff', fontSize: 10, fontWeight: 700, border: 'none', borderRadius: 8, padding: '5px 0', cursor: 'pointer' }}>
-            🔍 放大
-          </button>
           <a href={url} download target="_blank" rel="noreferrer"
-            style={{ flex: 1, background: '#c8ff3e', color: '#000', fontSize: 10, fontWeight: 700, border: 'none', borderRadius: 8, padding: '5px 0', cursor: 'pointer', textAlign: 'center', textDecoration: 'none' }}>
+            onClick={e => e.stopPropagation()}
+            style={{ flex: 1, background: '#c8ff3e', color: '#000', fontSize: 10, fontWeight: 700, borderRadius: 8, padding: '5px 0', textAlign: 'center', textDecoration: 'none', cursor: 'pointer' }}>
             ↓ 下載
           </a>
         </div>
-        {/* 獎勵按鈕 */}
         {isPublished ? (
-          <div style={{ textAlign: 'center', fontSize: 9, color: 'rgba(200,255,62,0.8)', padding: '3px 0' }}>✅ 已領取獎勵</div>
+          <div style={{ textAlign: 'center', fontSize: 9, color: 'rgba(200,255,62,0.8)', padding: '3px 0', pointerEvents: 'none' }}>✅ 已領取獎勵</div>
         ) : (
-          <button onMouseDown={e => { e.preventDefault(); if (canReward) onPublish() }}
-            style={{ width: '100%', background: canReward ? '#ff3d8a' : 'rgba(255,255,255,0.08)', color: canReward ? '#fff' : 'rgba(255,255,255,0.25)', fontSize: 10, fontWeight: 700, border: 'none', borderRadius: 8, padding: '5px 0', cursor: canReward ? 'pointer' : 'not-allowed' }}>
-            🎁 公開 +1 點{!canReward ? '（今日已達上限）' : ''}
+          <button onClick={e => { e.stopPropagation(); if (canReward) onPublish() }}
+            style={{ width: '100%', background: canReward ? '#ff3d8a' : 'rgba(255,255,255,0.08)', color: canReward ? '#fff' : 'rgba(255,255,255,0.3)', fontSize: 10, fontWeight: 700, border: 'none', borderRadius: 8, padding: '5px 0', cursor: canReward ? 'pointer' : 'not-allowed' }}>
+            🎁 公開 +1 點
           </button>
         )}
       </div>
@@ -891,32 +897,43 @@ export default function Generate() {
       </div>
     </div>
 
-    {/* ── Lightbox 放大圖片（全 inline style）──────────────────── */}
-    {lightbox && (
-      <div onClick={() => setLightbox(null)}
-        style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.93)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+    {/* ── Lightbox：掛在 document.body（Portal），不受父層 CSS 影響）*/}
+    {lightbox && createPortal(
+      <div
+        onClick={() => setLightbox(null)}
+        style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          zIndex: 99999,
+          background: 'rgba(0,0,0,0.94)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 20,
+        }}>
+        {/* 內容區：阻止冒泡 */}
         <div onClick={e => e.stopPropagation()}
-          style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          {/* 關閉 */}
+          style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, maxWidth: '92vw' }}>
+          {/* 關閉 ✕ */}
           <button onClick={() => setLightbox(null)}
-            style={{ position: 'absolute', top: -36, right: 0, background: 'none', border: 'none', color: 'rgba(255,255,255,0.5)', fontSize: 24, cursor: 'pointer', lineHeight: 1 }}>✕</button>
-          {/* 圖片 */}
+            style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 28, cursor: 'pointer', lineHeight: 1, padding: 4 }}>
+            ✕
+          </button>
+          {/* 原圖 */}
           <img src={lightbox} alt="放大預覽"
-            style={{ maxWidth: '90vw', maxHeight: 'calc(90vh - 60px)', objectFit: 'contain', borderRadius: 16, boxShadow: '0 0 60px rgba(0,0,0,0.8)' }} />
-          {/* 操作 */}
-          <div style={{ display: 'flex', gap: 8 }}>
+            style={{ maxWidth: '92vw', maxHeight: 'calc(90vh - 80px)', objectFit: 'contain', borderRadius: 14, boxShadow: '0 8px 60px rgba(0,0,0,0.9)', display: 'block' }} />
+          {/* 操作列 */}
+          <div style={{ display: 'flex', gap: 10 }}>
             <a href={lightbox} download target="_blank" rel="noreferrer"
               onClick={e => e.stopPropagation()}
-              style={{ background: '#c8ff3e', color: '#000', fontWeight: 700, fontSize: 13, padding: '8px 20px', borderRadius: 10, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
+              style={{ background: '#c8ff3e', color: '#000', fontWeight: 700, fontSize: 13, padding: '9px 22px', borderRadius: 10, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Download size={14} />下載原圖
             </a>
             <button onClick={() => setLightbox(null)}
-              style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 13, padding: '8px 20px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.15)', cursor: 'pointer' }}>
+              style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 13, padding: '9px 22px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', cursor: 'pointer' }}>
               關閉
             </button>
           </div>
         </div>
-      </div>
+      </div>,
+      document.body
     )}
   )
 }
