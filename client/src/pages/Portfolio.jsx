@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
 import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
-import { Image, Video, Calendar, ArrowLeft, Play, Download } from 'lucide-react'
+import { Image, Video, Calendar, ArrowLeft, Play } from 'lucide-react'
+import { openLightbox } from '../utils/lightbox'
 
 const TYPE_LABEL = {
   'text-to-image':  '文字生成圖片',
@@ -11,8 +11,8 @@ const TYPE_LABEL = {
   'image-to-video': '圖片生成影片',
 }
 
-// ── 媒體卡片（全 inline style，避免 Tailwind JIT purge）─────────
-function MediaCard({ item, onZoom }) {
+// ── 媒體卡片 ─────────────────────────────────────────────────────
+function MediaCard({ item }) {
   const [playing, setPlaying] = useState(false)
   const [hovered, setHovered] = useState(false)
   const isVideo = item.type === 'text-to-video' || item.type === 'image-to-video'
@@ -29,7 +29,6 @@ function MediaCard({ item, onZoom }) {
 
         {isVideo ? (
           playing ? (
-            /* 播放中：直接顯示 video 元素，muted 讓瀏覽器允許 autoplay */
             <video
               src={url}
               autoPlay
@@ -39,41 +38,35 @@ function MediaCard({ item, onZoom }) {
               onClick={e => e.stopPropagation()}
             />
           ) : (
-            /* 縮圖狀態：點擊播放 */
             <div
               onClick={() => setPlaying(true)}
-              style={{
-                aspectRatio: '16/9', background: '#000', display: 'flex',
-                alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-              }}
+              style={{ aspectRatio: '16/9', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative' }}
             >
-              <div style={{
-                width: 52, height: 52, borderRadius: '50%',
-                background: 'rgba(255,255,255,0.2)',
-                backdropFilter: 'blur(4px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                transition: 'background 0.2s',
-              }}>
+              <div style={{ width: 52, height: 52, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Play size={22} color="white" fill="white" style={{ marginLeft: 3 }} />
               </div>
-              <div style={{
-                position: 'absolute', bottom: 8, left: 8,
-                background: 'rgba(0,0,0,0.6)', color: 'rgba(255,255,255,0.7)',
-                fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600,
-              }}>
-                ▶ 影片
-              </div>
+              <span style={{ position: 'absolute', bottom: 8, left: 8, background: 'rgba(0,0,0,0.6)', color: 'rgba(255,255,255,0.7)', fontSize: 10, padding: '2px 7px', borderRadius: 4, fontWeight: 600 }}>▶ 影片</span>
             </div>
           )
         ) : (
-          /* 圖片：點擊放大 */
-          <img
-            src={url}
-            alt={item.prompt}
-            loading="lazy"
-            onClick={() => onZoom(url)}
-            style={{ width: '100%', display: 'block', cursor: 'zoom-in' }}
-          />
+          /* 圖片：單擊放大（vanilla-JS lightbox，不依賴 React Portal） */
+          <div style={{ position: 'relative', cursor: 'zoom-in' }} onClick={() => openLightbox(url)}>
+            <img
+              src={url}
+              alt={item.prompt}
+              loading="lazy"
+              style={{ width: '100%', display: 'block', pointerEvents: 'none' }}
+            />
+            {/* 放大提示 icon */}
+            <span style={{
+              position: 'absolute', top: 7, right: 7,
+              background: 'rgba(0,0,0,0.55)', color: '#fff',
+              fontSize: 13, width: 26, height: 26, borderRadius: '50%',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              opacity: hovered ? 1 : 0.45, transition: 'opacity 0.2s',
+              pointerEvents: 'none',
+            }}>🔍</span>
+          </div>
         )}
 
         {/* Hover 提示詞浮層 */}
@@ -85,67 +78,11 @@ function MediaCard({ item, onZoom }) {
           transition: 'opacity 0.2s',
           pointerEvents: 'none',
         }}>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {item.prompt}
-          </p>
-          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>
-            {TYPE_LABEL[item.type] || item.type}
-          </p>
+          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.85)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.prompt}</p>
+          <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', marginTop: 2 }}>{TYPE_LABEL[item.type] || item.type}</p>
         </div>
       </div>
     </div>
-  )
-}
-
-// ── Lightbox（共用）──────────────────────────────────────────────
-function Lightbox({ src, onClose }) {
-  return createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        zIndex: 99999,
-        background: 'rgba(0,0,0,0.94)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 20,
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, maxWidth: '92vw' }}
-      >
-        {/* 關閉按鈕 */}
-        <button
-          onClick={onClose}
-          style={{ position: 'absolute', top: -44, right: 0, background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 30, cursor: 'pointer', lineHeight: 1, padding: 4 }}
-        >
-          ✕
-        </button>
-        {/* 原圖 */}
-        <img
-          src={src}
-          alt="放大預覽"
-          style={{ maxWidth: '92vw', maxHeight: 'calc(90vh - 80px)', objectFit: 'contain', borderRadius: 14, boxShadow: '0 8px 60px rgba(0,0,0,0.9)', display: 'block' }}
-        />
-        {/* 操作列 */}
-        <div style={{ display: 'flex', gap: 10 }}>
-          <a
-            href={src} download target="_blank" rel="noreferrer"
-            onClick={e => e.stopPropagation()}
-            style={{ background: '#c8ff3e', color: '#000', fontWeight: 700, fontSize: 13, padding: '9px 22px', borderRadius: 10, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <Download size={14} />下載原圖
-          </a>
-          <button
-            onClick={onClose}
-            style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 13, padding: '9px 22px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', cursor: 'pointer' }}
-          >
-            關閉
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
   )
 }
 
@@ -155,7 +92,6 @@ export default function Portfolio() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter]   = useState('')
   const [page, setPage]       = useState(1)
-  const [lightbox, setLightbox] = useState(null)  // 放大圖片 URL
 
   useEffect(() => {
     setLoading(true)
@@ -164,13 +100,6 @@ export default function Portfolio() {
       .catch(() => setData(null))
       .finally(() => setLoading(false))
   }, [username, filter, page])
-
-  // ESC 關閉 lightbox
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') setLightbox(null) }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
 
   if (loading) return (
     <div className="min-h-screen bg-[#08080a] flex items-center justify-center">
@@ -190,86 +119,80 @@ export default function Portfolio() {
   const videos = records.filter(r => r.type === 'text-to-video' || r.type === 'image-to-video')
 
   return (
-    <>
-      <div className="min-h-screen bg-[#08080a]">
-        {/* Top bar */}
-        <div className="bg-[#0c0c0f]/90 backdrop-blur border-b border-white/5 sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto px-4 flex items-center gap-3 h-14">
-            <Link to="/" className="flex items-center gap-2 font-black text-lg shrink-0 mr-4">
-              <span className="text-2xl">👺</span>
-              <span className="text-white">Goblin</span>
-              <span style={{ color: '#c8ff3e' }}>AI</span>
-            </Link>
-            <Link to="/explore" className="flex items-center gap-1.5 text-white/40 hover:text-white text-sm transition-colors">
-              <ArrowLeft size={14} />探索
-            </Link>
-          </div>
-        </div>
-
-        <div className="max-w-6xl mx-auto px-4 py-10">
-          {/* User header */}
-          <div className="flex items-center gap-5 mb-8 fade-in-up">
-            <div className="w-20 h-20 bg-gradient-to-br from-[#c8ff3e]/40 to-[#c8ff3e]/10 border-2 border-[#c8ff3e]/30 rounded-full flex items-center justify-center text-3xl font-black" style={{ color: '#c8ff3e' }}>
-              {user.username?.[0]?.toUpperCase()}
-            </div>
-            <div>
-              <h1 className="text-2xl font-black text-white">{user.username}</h1>
-              <div className="flex items-center gap-4 mt-1 text-sm text-white/40">
-                <span className="flex items-center gap-1.5"><Image size={13} />{images.length} 張圖片</span>
-                <span className="flex items-center gap-1.5"><Video size={13} />{videos.length} 支影片</span>
-                <span className="flex items-center gap-1.5"><Calendar size={13} />加入於 {new Date(user.created_at).toLocaleDateString('zh-TW')}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Filter tabs */}
-          <div className="flex gap-2 mb-6">
-            {[
-              { v: '', label: `全部 (${total})` },
-              { v: 'text-to-image', label: '圖片' },
-              { v: 'text-to-video', label: '影片' },
-            ].map(f => (
-              <button key={f.v} onClick={() => { setFilter(f.v); setPage(1) }}
-                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${filter === f.v ? 'bg-[#c8ff3e] text-black' : 'bg-white/5 text-white/50 hover:text-white hover:bg-white/10'}`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-
-          {records.length === 0 ? (
-            <div className="py-24 text-center text-white/30">
-              <p className="text-lg">此用戶目前沒有公開作品</p>
-            </div>
-          ) : (
-            <>
-              {/* Masonry grid — inline style 避免 Tailwind purge */}
-              <div style={{ columns: 2, columnGap: 12 }}
-                className="sm:columns-3 lg:columns-4">
-                {records.map(item => (
-                  <MediaCard
-                    key={item.id}
-                    item={item}
-                    onZoom={url => setLightbox(url)}
-                  />
-                ))}
-              </div>
-
-              {data.totalPages > 1 && (
-                <div className="flex justify-center gap-2 mt-8">
-                  <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm disabled:opacity-30 transition-colors">上一頁</button>
-                  <span className="px-4 py-2 text-white/40 text-sm">{page} / {data.totalPages}</span>
-                  <button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm disabled:opacity-30 transition-colors">下一頁</button>
-                </div>
-              )}
-            </>
-          )}
+    <div className="min-h-screen bg-[#08080a]">
+      {/* Top bar */}
+      <div className="bg-[#0c0c0f]/90 backdrop-blur border-b border-white/5 sticky top-0 z-50">
+        <div className="max-w-6xl mx-auto px-4 flex items-center gap-3 h-14">
+          <Link to="/" className="flex items-center gap-2 font-black text-lg shrink-0 mr-4">
+            <span className="text-2xl">👺</span>
+            <span className="text-white">Goblin</span>
+            <span style={{ color: '#c8ff3e' }}>AI</span>
+          </Link>
+          <Link to="/explore" className="flex items-center gap-1.5 text-white/40 hover:text-white text-sm transition-colors">
+            <ArrowLeft size={14} />探索
+          </Link>
         </div>
       </div>
 
-      {/* Lightbox Portal — 掛到 document.body，不受任何父層 overflow 影響 */}
-      {lightbox && <Lightbox src={lightbox} onClose={() => setLightbox(null)} />}
-    </>
+      <div className="max-w-6xl mx-auto px-4 py-10">
+        {/* User header */}
+        <div className="flex items-center gap-5 mb-8 fade-in-up">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center text-3xl font-black"
+            style={{ background: 'linear-gradient(135deg, rgba(200,255,62,0.4), rgba(200,255,62,0.1))', border: '2px solid rgba(200,255,62,0.3)', color: '#c8ff3e' }}>
+            {user.username?.[0]?.toUpperCase()}
+          </div>
+          <div>
+            <h1 className="text-2xl font-black text-white">{user.username}</h1>
+            <div className="flex items-center gap-4 mt-1 text-sm text-white/40">
+              <span className="flex items-center gap-1.5"><Image size={13} />{images.length} 張圖片</span>
+              <span className="flex items-center gap-1.5"><Video size={13} />{videos.length} 支影片</span>
+              <span className="flex items-center gap-1.5"><Calendar size={13} />加入於 {new Date(user.created_at).toLocaleDateString('zh-TW')}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter tabs */}
+        <div className="flex gap-2 mb-6">
+          {[
+            { v: '', label: `全部 (${total})` },
+            { v: 'text-to-image', label: '圖片' },
+            { v: 'text-to-video', label: '影片' },
+          ].map(f => (
+            <button key={f.v} onClick={() => { setFilter(f.v); setPage(1) }}
+              style={{
+                padding: '6px 16px', borderRadius: 999, fontSize: 14, fontWeight: 500,
+                background: filter === f.v ? '#c8ff3e' : 'rgba(255,255,255,0.05)',
+                color: filter === f.v ? '#000' : 'rgba(255,255,255,0.5)',
+                border: 'none', cursor: 'pointer', transition: 'all 0.2s',
+              }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {records.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '80px 0', color: 'rgba(255,255,255,0.3)' }}>
+            <p style={{ fontSize: 18 }}>此用戶目前沒有公開作品</p>
+          </div>
+        ) : (
+          <>
+            {/* Masonry grid — 全 inline style */}
+            <div style={{ columns: '2 160px', columnGap: 12 }}>
+              {records.map(item => <MediaCard key={item.id} item={item} />)}
+            </div>
+
+            {data.totalPages > 1 && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginTop: 32 }}>
+                <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
+                  style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: 'none', borderRadius: 8, cursor: page <= 1 ? 'not-allowed' : 'pointer', opacity: page <= 1 ? 0.3 : 1 }}>上一頁</button>
+                <span style={{ padding: '8px 16px', color: 'rgba(255,255,255,0.4)', fontSize: 14 }}>{page} / {data.totalPages}</span>
+                <button disabled={page >= data.totalPages} onClick={() => setPage(p => p + 1)}
+                  style={{ padding: '8px 16px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: 'none', borderRadius: 8, cursor: page >= data.totalPages ? 'not-allowed' : 'pointer', opacity: page >= data.totalPages ? 0.3 : 1 }}>下一頁</button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   )
 }

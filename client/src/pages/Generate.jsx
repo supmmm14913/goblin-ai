@@ -1,22 +1,22 @@
 import { useState, useCallback } from 'react'
-import { createPortal } from 'react-dom'
 import { useDropzone } from 'react-dropzone'
 import { Link } from 'react-router-dom'
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Upload, X, Download, Settings, ChevronDown, ChevronUp, Coins, Wand2, Shuffle } from 'lucide-react'
+import { openLightbox } from '../utils/lightbox'
 
-// ── 圖片格子元件（全 inline style，Portal lightbox）────────────
-function GridImageCard({ url, index, isPublished, canReward, onZoom, onPublish }) {
+// ── 圖片格子元件（全 inline style，vanilla-JS lightbox）──────────
+function GridImageCard({ url, index, isPublished, canReward, onPublish }) {
   const [hovered, setHovered] = useState(false)
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
-      onDoubleClick={onZoom}
-      title="雙擊放大"
+      onClick={() => openLightbox(url)}
+      title="點擊放大"
       style={{ position: 'relative', aspectRatio: '1/1', background: '#000', borderRadius: '12px', overflow: 'hidden', cursor: 'zoom-in', userSelect: 'none' }}>
 
       <img src={url} alt={`#${index + 1}`}
@@ -29,8 +29,7 @@ function GridImageCard({ url, index, isPublished, canReward, onZoom, onPublish }
       </span>
 
       {/* 放大圖示（常駐右上）*/}
-      <span onClick={e => { e.stopPropagation(); onZoom() }}
-        style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 12, width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: hovered ? 1 : 0.5, transition: 'opacity 0.2s' }}>
+      <span style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 12, width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: hovered ? 1 : 0.5, transition: 'opacity 0.2s' }}>
         🔍
       </span>
 
@@ -222,7 +221,7 @@ export default function Generate() {
   const [resultIds, setResultIds] = useState([]) // 對應的 generation id
   const [publishedIds, setPublishedIds] = useState(new Set()) // 已領獎的 id
   const [dailyReward, setDailyReward] = useState({ today_count: 0, daily_limit: 5 })
-  const [lightbox, setLightbox] = useState(null) // 放大圖片 URL
+
 
   const onDrop = useCallback((files) => {
     const file = files[0]; if (!file) return
@@ -410,7 +409,6 @@ export default function Generate() {
   }
 
   return (
-    <>
     <div className="flex gap-4 h-[calc(100vh-120px)]">
 
       {/* ── 左側控制面板 ─────────────────────────────── */}
@@ -810,8 +808,6 @@ export default function Generate() {
                       <GridImageCard
                         key={i} url={url} index={i}
                         isPublished={isPublished} canReward={canReward}
-                        onZoom={() => setLightbox(url)}
-                        onDownload={() => {}}
                         onPublish={() => handlePublish(genId, i)}
                       />
                     )
@@ -824,9 +820,9 @@ export default function Generate() {
                   <video src={result} controls autoPlay className="max-w-full max-h-full rounded-xl" />
                 ) : (
                   <img src={result} alt="生成結果"
-                    title="雙擊放大"
+                    title="點擊放大"
                     style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: '12px', cursor: 'zoom-in' }}
-                    onDoubleClick={() => setLightbox(result)} />
+                    onClick={() => openLightbox(result)} />
                 )}
               </div>
             )}
@@ -898,44 +894,5 @@ export default function Generate() {
       </div>
     </div>
 
-    {/* ── Lightbox：掛在 document.body（Portal），不受父層 CSS 影響）*/}
-    {lightbox && createPortal(
-      <div
-        onClick={() => setLightbox(null)}
-        style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          zIndex: 99999,
-          background: 'rgba(0,0,0,0.94)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: 20,
-        }}>
-        {/* 內容區：阻止冒泡 */}
-        <div onClick={e => e.stopPropagation()}
-          style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, maxWidth: '92vw' }}>
-          {/* 關閉 ✕ */}
-          <button onClick={() => setLightbox(null)}
-            style={{ position: 'absolute', top: -40, right: 0, background: 'none', border: 'none', color: 'rgba(255,255,255,0.6)', fontSize: 28, cursor: 'pointer', lineHeight: 1, padding: 4 }}>
-            ✕
-          </button>
-          {/* 原圖 */}
-          <img src={lightbox} alt="放大預覽"
-            style={{ maxWidth: '92vw', maxHeight: 'calc(90vh - 80px)', objectFit: 'contain', borderRadius: 14, boxShadow: '0 8px 60px rgba(0,0,0,0.9)', display: 'block' }} />
-          {/* 操作列 */}
-          <div style={{ display: 'flex', gap: 10 }}>
-            <a href={lightbox} download target="_blank" rel="noreferrer"
-              onClick={e => e.stopPropagation()}
-              style={{ background: '#c8ff3e', color: '#000', fontWeight: 700, fontSize: 13, padding: '9px 22px', borderRadius: 10, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Download size={14} />下載原圖
-            </a>
-            <button onClick={() => setLightbox(null)}
-              style={{ background: 'rgba(255,255,255,0.1)', color: '#fff', fontWeight: 600, fontSize: 13, padding: '9px 22px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.18)', cursor: 'pointer' }}>
-              關閉
-            </button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    )}
-    </>
   )
 }
