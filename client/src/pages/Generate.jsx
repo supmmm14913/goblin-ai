@@ -157,6 +157,7 @@ export default function Generate() {
   const [resultIds, setResultIds] = useState([]) // 對應的 generation id
   const [publishedIds, setPublishedIds] = useState(new Set()) // 已領獎的 id
   const [dailyReward, setDailyReward] = useState({ today_count: 0, daily_limit: 5 })
+  const [lightbox, setLightbox] = useState(null) // 放大圖片 URL
 
   const onDrop = useCallback((files) => {
     const file = files[0]; if (!file) return
@@ -731,44 +732,68 @@ export default function Generate() {
               </div>
             </div>
 
-            {/* 圖片 Grid — 可滾動 */}
-            <div className={`overflow-y-auto p-2 ${results.length > 1 ? 'grid grid-cols-2 gap-2 content-start' : 'flex items-center justify-center bg-black flex-1'}`}
-              style={results.length > 1 ? { maxHeight: 'calc(100vh - 280px)' } : { minHeight: '300px' }}>
-              {resultType === 'video' ? (
-                <video src={result} controls autoPlay className="max-w-full max-h-full rounded-xl" />
-              ) : results.length > 1 ? (
-                results.map((url, i) => {
-                  const genId = resultIds[i]
-                  const isPublished = publishedIds.has(genId)
-                  const canReward = !isPublished && dailyReward.today_count < dailyReward.daily_limit
-                  return (
-                    <div key={i} className="relative group bg-black rounded-xl overflow-hidden" style={{aspectRatio:'1/1'}}>
-                      <img src={url} alt={`生成結果 ${i + 1}`} className="w-full h-full object-cover" />
-                      {/* hover overlay */}
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                        <a href={url} download target="_blank" rel="noreferrer"
-                          className="bg-[#c8ff3e] text-black text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
-                          <Download size={11} />下載
-                        </a>
-                        {isPublished ? (
-                          <span className="text-[10px] text-[#c8ff3e]/70 bg-black/50 px-2 py-1 rounded-lg">✅ 已領取獎勵</span>
-                        ) : (
-                          <button onClick={() => handlePublish(genId, i)}
-                            disabled={!canReward}
-                            className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all ${canReward ? 'bg-[#ff3d8a] text-white hover:bg-[#ff5599]' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
-                            🎁 公開 +{resultType === 'video' ? 2 : 1} 點
-                          </button>
+            {/* 圖片 Grid — 可滾動，inline style 避免 Tailwind purge */}
+            {results.length > 1 ? (
+              <div className="overflow-y-auto flex-1 p-2" style={{ minHeight: 0 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+                  {results.map((url, i) => {
+                    const genId = resultIds[i]
+                    const isPublished = publishedIds.has(genId)
+                    const canReward = !isPublished && dailyReward.today_count < dailyReward.daily_limit
+                    return (
+                      <div key={i} className="relative group bg-black rounded-xl overflow-hidden"
+                        style={{ aspectRatio: '1 / 1', cursor: 'zoom-in' }}>
+                        {/* 點擊放大 */}
+                        <img src={url} alt={`生成結果 ${i + 1}`}
+                          className="w-full h-full object-cover"
+                          onClick={() => setLightbox(url)} />
+                        {/* hover overlay — 阻止點擊穿透到 img */}
+                        <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-end justify-start gap-1 p-1.5"
+                          style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 50%, rgba(0,0,0,0.7) 100%)' }}>
+                          <span className="bg-black/60 text-white/60 text-[9px] px-1.5 py-0.5 rounded self-start">#{i + 1}</span>
+                          <div className="flex-1" />
+                          <div className="flex gap-1 w-full">
+                            <button onClick={(e) => { e.stopPropagation(); setLightbox(url) }}
+                              className="flex-1 bg-white/20 text-white text-[10px] font-bold py-1 rounded-lg hover:bg-white/30">
+                              🔍 放大
+                            </button>
+                            <a href={url} download target="_blank" rel="noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="flex-1 bg-[#c8ff3e] text-black text-[10px] font-bold py-1 rounded-lg text-center hover:bg-[#d4ff5c]">
+                              ↓ 下載
+                            </a>
+                          </div>
+                          {isPublished ? (
+                            <div className="w-full text-center text-[9px] text-[#c8ff3e]/80 bg-black/40 py-0.5 rounded-lg">✅ 已領取獎勵</div>
+                          ) : (
+                            <button onClick={(e) => { e.stopPropagation(); handlePublish(genId, i) }}
+                              disabled={!canReward}
+                              className="w-full text-[10px] font-bold py-1 rounded-lg transition-all"
+                              style={{ background: canReward ? '#ff3d8a' : 'rgba(255,255,255,0.08)', color: canReward ? '#fff' : 'rgba(255,255,255,0.25)', cursor: canReward ? 'pointer' : 'not-allowed' }}>
+                              🎁 公開 +1 點
+                            </button>
+                          )}
+                        </div>
+                        {isPublished && (
+                          <span className="absolute top-1.5 right-1.5 text-[9px] px-1.5 py-0.5 rounded font-bold"
+                            style={{ background: '#c8ff3e', color: '#000' }}>已公開</span>
                         )}
                       </div>
-                      <span className="absolute top-1.5 left-1.5 bg-black/60 text-white/60 text-[9px] px-1.5 py-0.5 rounded">#{i + 1}</span>
-                      {isPublished && <span className="absolute top-1.5 right-1.5 bg-[#c8ff3e]/90 text-black text-[9px] px-1.5 py-0.5 rounded font-bold">已公開</span>}
-                    </div>
-                  )
-                })
-              ) : (
-                <img src={result} alt="生成結果" className="max-w-full max-h-full object-contain rounded-xl" />
-              )}
-            </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-black" style={{ minHeight: '300px', cursor: resultType !== 'video' ? 'zoom-in' : 'default' }}>
+                {resultType === 'video' ? (
+                  <video src={result} controls autoPlay className="max-w-full max-h-full rounded-xl" />
+                ) : (
+                  <img src={result} alt="生成結果"
+                    className="max-w-full max-h-full object-contain rounded-xl"
+                    onClick={() => setLightbox(result)} />
+                )}
+              </div>
+            )}
 
             {/* 單張圖片的獎勵提示 */}
             {results.length === 1 && resultType !== 'video' && (
@@ -836,5 +861,32 @@ export default function Generate() {
         )}
       </div>
     </div>
+
+    {/* ── Lightbox 放大圖片 ──────────────────────────────────── */}
+    {lightbox && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ background: 'rgba(0,0,0,0.92)' }}
+        onClick={() => setLightbox(null)}>
+        <div className="relative max-w-5xl w-full flex flex-col items-center gap-3"
+          onClick={e => e.stopPropagation()}>
+          {/* 關閉按鈕 */}
+          <button onClick={() => setLightbox(null)}
+            className="absolute -top-10 right-0 text-white/50 hover:text-white text-2xl leading-none">✕</button>
+          {/* 放大圖片 */}
+          <img src={lightbox} alt="放大預覽"
+            className="rounded-2xl shadow-2xl"
+            style={{ maxHeight: 'calc(100vh - 120px)', maxWidth: '100%', objectFit: 'contain' }} />
+          {/* 操作按鈕 */}
+          <div className="flex gap-3">
+            <a href={lightbox} download target="_blank" rel="noreferrer"
+              className="btn-neon flex items-center gap-2 px-5 py-2 text-sm" onClick={e => e.stopPropagation()}>
+              <Download size={14} />下載原圖
+            </a>
+            <button onClick={() => setLightbox(null)} className="btn-secondary px-5 py-2 text-sm">關閉</button>
+          </div>
+        </div>
+      </div>
+    )}
   )
 }
