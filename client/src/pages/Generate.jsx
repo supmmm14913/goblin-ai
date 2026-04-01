@@ -154,6 +154,9 @@ export default function Generate() {
   const [maskPreview, setMaskPreview] = useState(null)
   const [imageCount, setImageCount] = useState(1)
   const [results, setResults] = useState([]) // 批量結果
+  const [resultIds, setResultIds] = useState([]) // 對應的 generation id
+  const [publishedIds, setPublishedIds] = useState(new Set()) // 已領獎的 id
+  const [dailyReward, setDailyReward] = useState({ today_count: 0, daily_limit: 5 })
 
   const onDrop = useCallback((files) => {
     const file = files[0]; if (!file) return
@@ -191,6 +194,35 @@ export default function Generate() {
 
   const examples = EXAMPLE_PROMPTS[style] || EXAMPLE_PROMPTS.none
 
+  // 載入每日獎勵狀態
+  const fetchDailyReward = async () => {
+    try {
+      const res = await axios.get('/generate/daily-reward-status')
+      setDailyReward(res.data)
+    } catch {}
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useState(() => { fetchDailyReward() }, [])
+
+  // 公開作品並領取獎勵
+  const handlePublish = async (genId, idx) => {
+    if (publishedIds.has(genId)) return
+    if (dailyReward.today_count >= dailyReward.daily_limit) {
+      toast.error('今日獎勵已達上限（5 次）')
+      return
+    }
+    try {
+      const res = await axios.post(`/generate/publish/${genId}`)
+      const { reward, credits, today_count } = res.data
+      setPublishedIds(prev => new Set([...prev, genId]))
+      setDailyReward(d => ({ ...d, today_count }))
+      updateCredits(credits)
+      toast.success(`🎁 已公開！獲得 +${reward} 點`)
+    } catch (err) {
+      toast.error(err.response?.data?.error || '領取獎勵失敗')
+    }
+  }
+
   const randomPrompt = () => {
     const subject = RANDOM_SUBJECTS[Math.floor(Math.random() * RANDOM_SUBJECTS.length)]
     setPrompt(subject)
@@ -225,8 +257,12 @@ export default function Generate() {
           model, width: size.w, height: size.h, style, quality, image_count: imageCount
         })
         const urls = res.data.image_urls || [res.data.image_url]
+        // 建立 id 列表：第一張用回傳的 id，批量的額外張先用 index placeholder
+        const ids = urls.map((_, i) => i === 0 ? res.data.id : `${res.data.id}_${i}`)
         setResults(urls); setResult(urls[0]); setResultType('image')
+        setResultIds(ids); setPublishedIds(new Set())
         if (res.data.credits !== undefined) updateCredits(res.data.credits)
+        fetchDailyReward()
         toast.success(urls.length > 1 ? `成功生成 ${urls.length} 張圖片！` : '圖片生成成功！')
         setLoading(false); setLoadingMsg('')
 
@@ -644,7 +680,7 @@ export default function Generate() {
       </div>
 
       {/* ── 右側結果區 ──────────────────────────────── */}
-      <div className="flex-1 bg-[#111114] border border-white/8 rounded-2xl overflow-hidden flex flex-col">
+      <div className="flex-1 bg-[#111114] border border-white/8 rounded-2xl overflow-hidden flex flex-col min-h-0">
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8">
             <div className="relative w-20 h-20">
@@ -666,45 +702,96 @@ export default function Generate() {
             </div>
           </div>
         ) : result ? (
-          <div className="flex-1 flex flex-col">
-            {/* 標題列 */}
-            <div className="px-4 pt-3 flex items-center gap-2 flex-wrap">
-              {style !== 'none' && (
-                <span className="text-xs px-2 py-1 rounded-full border" style={{borderColor:'rgba(200,255,62,0.3)',color:'#c8ff3e',background:'rgba(200,255,62,0.08)'}}>
-                  {currentStyle.emoji} {currentStyle.label}
+          <div className="flex-1 flex flex-col min-h-0">
+            {/* 標題列 + 每日獎勵進度 */}
+            <div className="px-4 pt-3 pb-2 flex items-center justify-between gap-2 flex-wrap shrink-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                {style !== 'none' && (
+                  <span className="text-xs px-2 py-1 rounded-full border" style={{borderColor:'rgba(200,255,62,0.3)',color:'#c8ff3e',background:'rgba(200,255,62,0.08)'}}>
+                    {currentStyle.emoji} {currentStyle.label}
+                  </span>
+                )}
+                {results.length > 1 && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-white/8 text-white/50 border border-white/10">
+                    {results.length} 張
+                  </span>
+                )}
+              </div>
+              {/* 每日獎勵進度 */}
+              <div className="flex items-center gap-1.5 text-[10px] text-white/30">
+                <span>🎁 今日獎勵</span>
+                <div className="flex gap-0.5">
+                  {Array.from({length: dailyReward.daily_limit}).map((_, i) => (
+                    <div key={i} className={`w-2 h-2 rounded-full ${i < dailyReward.today_count ? 'bg-[#c8ff3e]' : 'bg-white/15'}`} />
+                  ))}
+                </div>
+                <span style={{color: dailyReward.today_count >= dailyReward.daily_limit ? '#ef4444' : 'rgba(255,255,255,0.3)'}}>
+                  {dailyReward.today_count}/{dailyReward.daily_limit}
                 </span>
-              )}
-              {results.length > 1 && (
-                <span className="text-xs px-2 py-1 rounded-full bg-white/8 text-white/50 border border-white/10">
-                  {results.length} 張圖片
-                </span>
-              )}
+              </div>
             </div>
 
-            {/* 圖片 Grid */}
-            <div className={`flex-1 p-2 overflow-y-auto ${results.length > 1 ? 'grid gap-2 ' + (results.length === 2 ? 'grid-cols-2' : 'grid-cols-2') : 'flex items-center justify-center bg-black'}`}
-              style={{ minHeight: '300px' }}>
+            {/* 圖片 Grid — 可滾動 */}
+            <div className={`overflow-y-auto p-2 ${results.length > 1 ? 'grid grid-cols-2 gap-2 content-start' : 'flex items-center justify-center bg-black flex-1'}`}
+              style={results.length > 1 ? { maxHeight: 'calc(100vh - 280px)' } : { minHeight: '300px' }}>
               {resultType === 'video' ? (
                 <video src={result} controls autoPlay className="max-w-full max-h-full rounded-xl" />
               ) : results.length > 1 ? (
-                results.map((url, i) => (
-                  <div key={i} className="relative group aspect-square bg-black rounded-xl overflow-hidden">
-                    <img src={url} alt={`生成結果 ${i + 1}`} className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                      <a href={url} download target="_blank" rel="noreferrer"
-                        className="bg-[#c8ff3e] text-black text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
-                        <Download size={11} />下載
-                      </a>
+                results.map((url, i) => {
+                  const genId = resultIds[i]
+                  const isPublished = publishedIds.has(genId)
+                  const canReward = !isPublished && dailyReward.today_count < dailyReward.daily_limit
+                  return (
+                    <div key={i} className="relative group bg-black rounded-xl overflow-hidden" style={{aspectRatio:'1/1'}}>
+                      <img src={url} alt={`生成結果 ${i + 1}`} className="w-full h-full object-cover" />
+                      {/* hover overlay */}
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                        <a href={url} download target="_blank" rel="noreferrer"
+                          className="bg-[#c8ff3e] text-black text-xs font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
+                          <Download size={11} />下載
+                        </a>
+                        {isPublished ? (
+                          <span className="text-[10px] text-[#c8ff3e]/70 bg-black/50 px-2 py-1 rounded-lg">✅ 已領取獎勵</span>
+                        ) : (
+                          <button onClick={() => handlePublish(genId, i)}
+                            disabled={!canReward}
+                            className={`text-[10px] font-bold px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all ${canReward ? 'bg-[#ff3d8a] text-white hover:bg-[#ff5599]' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}>
+                            🎁 公開 +{resultType === 'video' ? 2 : 1} 點
+                          </button>
+                        )}
+                      </div>
+                      <span className="absolute top-1.5 left-1.5 bg-black/60 text-white/60 text-[9px] px-1.5 py-0.5 rounded">#{i + 1}</span>
+                      {isPublished && <span className="absolute top-1.5 right-1.5 bg-[#c8ff3e]/90 text-black text-[9px] px-1.5 py-0.5 rounded font-bold">已公開</span>}
                     </div>
-                    <span className="absolute top-1.5 left-1.5 bg-black/60 text-white/60 text-[9px] px-1.5 py-0.5 rounded">#{i + 1}</span>
-                  </div>
-                ))
+                  )
+                })
               ) : (
                 <img src={result} alt="生成結果" className="max-w-full max-h-full object-contain rounded-xl" />
               )}
             </div>
 
-            <div className="p-4 border-t border-white/8 flex gap-2">
+            {/* 單張圖片的獎勵提示 */}
+            {results.length === 1 && resultType !== 'video' && (
+              <div className="px-4 py-2 shrink-0">
+                {(() => {
+                  const genId = resultIds[0]
+                  const isPublished = publishedIds.has(genId)
+                  const canReward = !isPublished && dailyReward.today_count < dailyReward.daily_limit
+                  return isPublished ? (
+                    <div className="flex items-center gap-1.5 text-[10px] text-[#c8ff3e]/60 bg-[#c8ff3e]/5 border border-[#c8ff3e]/15 rounded-lg px-3 py-2">
+                      ✅ 已公開並領取 +1 點獎勵
+                    </div>
+                  ) : (
+                    <button onClick={() => handlePublish(genId, 0)} disabled={!canReward}
+                      className={`w-full flex items-center justify-center gap-2 py-2 rounded-xl text-xs font-bold border transition-all ${canReward ? 'bg-[#ff3d8a]/10 border-[#ff3d8a]/30 text-[#ff3d8a] hover:bg-[#ff3d8a]/20' : 'bg-white/5 border-white/10 text-white/20 cursor-not-allowed'}`}>
+                      🎁 公開此圖片，獲得 +1 點{!canReward && dailyReward.today_count >= dailyReward.daily_limit ? '（今日已達上限）' : ''}
+                    </button>
+                  )
+                })()}
+              </div>
+            )}
+
+            <div className="p-3 border-t border-white/8 flex gap-2 shrink-0">
               {results.length > 1 ? (
                 <>
                   <button onClick={async () => {
@@ -713,18 +800,18 @@ export default function Generate() {
                       a.download = `goblin-ai-${i+1}.jpg`; a.target = '_blank'; a.click()
                       await new Promise(r => setTimeout(r, 300))
                     }
-                  }} className="btn-neon flex items-center gap-2 flex-1 justify-center py-2.5 text-sm">
+                  }} className="btn-neon flex items-center gap-2 flex-1 justify-center py-2 text-sm">
                     <Download size={14} />下載全部 ({results.length} 張)
                   </button>
-                  <button onClick={() => { setResult(null); setResults([]) }} className="btn-secondary py-2.5 px-4 text-sm">再生成</button>
+                  <button onClick={() => { setResult(null); setResults([]) }} className="btn-secondary py-2 px-4 text-sm">再生成</button>
                 </>
               ) : (
                 <>
                   <a href={result} download target="_blank" rel="noreferrer"
-                    className="btn-neon flex items-center gap-2 flex-1 justify-center py-2.5 text-sm">
+                    className="btn-neon flex items-center gap-2 flex-1 justify-center py-2 text-sm">
                     <Download size={14} />{resultType === 'video' ? '下載影片' : '下載圖片'}
                   </a>
-                  <button onClick={() => { setResult(null); setResults([]) }} className="btn-secondary py-2.5 px-4 text-sm">再生成</button>
+                  <button onClick={() => { setResult(null); setResults([]) }} className="btn-secondary py-2 px-4 text-sm">再生成</button>
                 </>
               )}
             </div>

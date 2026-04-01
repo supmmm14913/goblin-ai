@@ -277,7 +277,7 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
     id, user_id: req.user.id, type: 'text-to-image',
     prompt, negative_prompt: negative_prompt || null, model,
     width, height, image_url: null, status: 'processing',
-    is_public: true, credit_cost: req.creditCost,
+    is_public: false, credit_cost: req.creditCost,
     created_at: new Date().toISOString()
   });
 
@@ -300,7 +300,7 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
           id: uuidv4(), user_id: req.user.id, type: 'text-to-image',
           prompt, negative_prompt: negative_prompt || null, model,
           width, height, image_url: imageUrls[i], status: 'completed',
-          is_public: true, credit_cost: 0, prompt_en: finalPrompt,
+          is_public: false, credit_cost: 0, prompt_en: finalPrompt,
           created_at: new Date().toISOString()
         });
       }
@@ -334,7 +334,7 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
       await db.insertOne('generations', {
         id: uuidv4(), user_id: req.user.id, type: 'text-to-image',
         prompt, model, width, height, image_url: imageUrls[i], status: 'completed',
-        is_public: true, credit_cost: 0, created_at: new Date().toISOString()
+        is_public: false, credit_cost: 0, created_at: new Date().toISOString()
       });
     }
     const updatedUser = await db.findOne('users', { id: req.user.id });
@@ -367,7 +367,7 @@ router.post('/image-to-image', authMiddleware, checkCredits('image-to-image'), u
   await db.insertOne('generations', {
     id, user_id: req.user.id, type: 'image-to-image',
     prompt, model: 'sdxl', image_url: null, status: 'processing',
-    is_public: true,
+    is_public: false,
     credit_cost: req.creditCost, created_at: new Date().toISOString()
   });
 
@@ -503,7 +503,7 @@ router.post('/text-to-video', authMiddleware, checkCredits('text-to-video'), asy
       prompt, prompt_en: finalPrompt, model: modelName,
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
-      is_public: true,
+      is_public: false,
       credit_cost: req.creditCost, created_at: new Date().toISOString()
     });
 
@@ -551,7 +551,7 @@ router.post('/image-to-video', authMiddleware, checkCredits('image-to-video'), u
       prompt, model: modelName,
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
-      is_public: true,
+      is_public: false,
       credit_cost: req.creditCost, created_at: new Date().toISOString()
     });
 
@@ -608,7 +608,7 @@ router.post('/inpaint', authMiddleware, checkCredits('inpaint'),
         id, user_id: req.user.id, type: 'inpaint',
         prompt, model: 'sdxl-inpaint',
         image_url: imageUrl, status: 'completed',
-        is_public: true,
+        is_public: false,
         credit_cost: req.creditCost, created_at: new Date().toISOString()
       });
 
@@ -635,6 +635,48 @@ router.get('/models', authMiddleware, (req, res) => {
       { id: 'svd', name: 'SVD', desc: '圖片生成影片', cost: 5, type: ['image-to-video'] },
     ]
   });
+});
+
+// ── 每日獎勵：公開作品獲得點數 ──────────────────────────────────
+// GET /generate/daily-reward-status
+router.get('/daily-reward-status', authMiddleware, async (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  const allGens = await db.find('generations', { user_id: req.user.id }) || [];
+  const todayCount = allGens.filter(g =>
+    g.reward_given && g.published_at && g.published_at.slice(0, 10) === today
+  ).length;
+  res.json({ today_count: todayCount, daily_limit: 5 });
+});
+
+// POST /generate/publish/:id — 公開作品 + 領取獎勵
+router.post('/publish/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const gen = await db.findOne('generations', { id, user_id: req.user.id });
+  if (!gen) return res.status(404).json({ error: '找不到此作品' });
+  if (gen.reward_given) return res.status(400).json({ error: '此作品已領取過獎勵' });
+  if (!gen.image_url && !gen.video_url) return res.status(400).json({ error: '作品尚未生成完成' });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const allGens = await db.find('generations', { user_id: req.user.id }) || [];
+  const todayCount = allGens.filter(g =>
+    g.reward_given && g.published_at && g.published_at.slice(0, 10) === today
+  ).length;
+  if (todayCount >= 5) {
+    return res.status(400).json({ error: '今日已達每日獎勵上限（5 次）', today_count: 5, daily_limit: 5 });
+  }
+
+  const isVideo = gen.type === 'text-to-video' || gen.type === 'image-to-video';
+  const reward = isVideo ? 2 : 1;
+
+  await db.updateOne('generations', { id }, {
+    is_public: true, reward_given: true, published_at: new Date().toISOString(),
+  });
+
+  const user = await db.findOne('users', { id: req.user.id });
+  const newCredits = (user.credits || 0) + reward;
+  await db.updateOne('users', { id: req.user.id }, { credits: newCredits });
+
+  res.json({ success: true, reward, credits: newCredits, today_count: todayCount + 1, daily_limit: 5 });
 });
 
 function getAspectRatio(width, height) {
