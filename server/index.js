@@ -20,6 +20,7 @@ app.use('/api/generate', require('./routes/generate'));
 app.use('/api/history', require('./routes/history'));
 app.use('/api/payment', require('./routes/payment').router);
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/portfolio', require('./routes/portfolio'));
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 

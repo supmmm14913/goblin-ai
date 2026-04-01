@@ -14,6 +14,7 @@ const CREDIT_COST = {
   'image-to-image': 3,
   'text-to-video': 5,
   'image-to-video': 5,
+  'inpaint': 3,
 };
 
 // 品質等級對應模型參數
@@ -34,11 +35,148 @@ const upload = multer({
 });
 
 const MODELS = {
-  'flux-schnell':  'black-forest-labs/flux-schnell',
-  'flux-dev':      'black-forest-labs/flux-dev',
-  'flux-1.1-pro':  'black-forest-labs/flux-1.1-pro',
-  'sdxl': 'stability-ai/sdxl:39ed52f2319f9c07e2c6ce3367fb4cb7203f4cd64a25d6927f7fa2d07fa7fba5',
+  'flux-schnell':     'black-forest-labs/flux-schnell',
+  'flux-dev':         'black-forest-labs/flux-dev',
+  'flux-1.1-pro':     'black-forest-labs/flux-1.1-pro',
+  'sdxl':             'stability-ai/sdxl:39ed52f2319f9c07e2c6ce3367fb4cb7203f4cd64a25d6927f7fa2d07fa7fba5',
+  'dreamshaper-xl':   'lucataco/dreamshaper-xl-turbo',
+  'realistic-vision': 'lucataco/realistic-vision-v5',
+  'anything-v5':      'cjwbw/anything-v5',
+  'deliberate-v2':    'lucataco/deliberate-v2',
 };
+
+// SD 1.5 models (max 768px resolution, 30 steps)
+const SD15_MODELS = new Set(['realistic-vision', 'anything-v5', 'deliberate-v2']);
+// FLUX models (use aspect_ratio instead of width/height)
+const FLUX_MODELS  = new Set(['flux-schnell', 'flux-dev', 'flux-1.1-pro']);
+
+// ── NovitaAI 模型（69 個 SEXY.AI 同款）────────────────────────────
+const NOVITA_MODELS = {
+  // 通用 / 寫實
+  'novita-dreamshaper':             'dreamshaper_8.safetensors',
+  'novita-chillout-mix':            'chilloutmix_NiPrunedFp32Fix.safetensors',
+  'novita-deliberate':              'deliberate_v2.safetensors',
+  'novita-cyber-realistic':         'cyberrealistic_v33.safetensors',
+  'novita-cyber-realistic-revamp':  'cyberRealisticRevamp_v30VAE.safetensors',
+  'novita-epic-photo':              'epicphotogasm_xPlusPlus.safetensors',
+  'novita-epic-photo-v3':           'epicphotogasm_v3.safetensors',
+  'novita-epic-natural':            'epicNaturalBeautiful_v2.safetensors',
+  'novita-epic-realism':            'epicrealism_naturalSinRC1VAE.safetensors',
+  'novita-photography':             'photography_v1.safetensors',
+  'novita-photon':                  'photon_v1.safetensors',
+  'novita-ghost-mix':               'ghostmix_v20Bakedvae.safetensors',
+  'novita-grounded-realistic':      'groundedRealisticMix_v11.safetensors',
+  'novita-realistic-vision-v4':     'realisticVisionV40_v40VAE.safetensors',
+  'novita-realistic-vision-v5':     'realisticVisionV51_v51VAE.safetensors',
+  'novita-real-dream':              'realDream_10.safetensors',
+  'novita-reliberate':              'reliberate_v24.safetensors',
+  'novita-rev-animated':            'revAnimated_v122EOL.safetensors',
+  'novita-urpm':                    'URPM_v1.3.safetensors',
+  'novita-uhd':                     'uhd23_unifiedHighDetail.safetensors',
+  'novita-sd15':                    'v1-5-pruned-emaonly.safetensors',
+  'novita-lazymix':                 'lazymixRealAmateur_v1.safetensors',
+  'novita-babes-v2':                'babes_20.safetensors',
+  'novita-experience':              'experience_v2.safetensors',
+  'novita-bom':                     'bom_v10.safetensors',
+  'novita-art-universe':            'artUniverse_v5.safetensors',
+  // 動漫 / 卡通
+  'novita-anime':                   'meinamix_meinaV11.safetensors',
+  'novita-anime-characters':        'animecharacters_v1.safetensors',
+  'novita-anything-v5':             'anything-v5-PrtRE.safetensors',
+  'novita-hassaku-hentai':          'hassakuHentai_v12.safetensors',
+  'novita-hentai-v2':               'hentaiDiffusion_v21.safetensors',
+  'novita-hardcore-hentai':         'hardcoreHentai_v13.safetensors',
+  'novita-pony-diffusion':          'ponyDiffusionXLV6_v6StartWithThisOne.safetensors',
+  'novita-dreamshaper-pixel':       'dreamshaperXL_lightningDPMSDE.safetensors',
+  'novita-real-cartoon-3d':         'realcartoon3d_v8.safetensors',
+  'novita-toon-universe':           'toonuniverse_v5.safetensors',
+  'novita-fantasy-mix':             'fantasymix_v1.safetensors',
+  'novita-porn-cartoon':            'pornCartoon_v1.safetensors',
+  // Furry
+  'novita-furry':                   'yiffymix_v34.safetensors',
+  'novita-anime-furry':             'animefurry_v1.safetensors',
+  'novita-coconut-furry':           'coconutfurrymix_v1.safetensors',
+  'novita-pina-colada-furry':       'pinacoladafurrymix_v1.safetensors',
+  'novita-persika-furry':           'persikafurryrealism_v1.safetensors',
+  'novita-yiffy-mix':               'yiffymix_v34.safetensors',
+  'novita-seel-real-furry':         'seelrealFurry_v493.safetensors',
+  // 成人 / 特殊
+  'novita-abyss-orange-mix':        'abyssorangemix2SFW_sfw.safetensors',
+  'novita-porn-merge':              'pornMasterPro_v00.safetensors',
+  'novita-porn-ultimate':           'pornultimate_v3.safetensors',
+  'novita-buxom-brits':             'buxombrits_v1.safetensors',
+  'novita-clear-bondage':           'clearBondage_v1.safetensors',
+  'novita-latex-vision':            'latexvision_v1.safetensors',
+  'novita-vr-porn':                 'vrPorn_v3.safetensors',
+  'novita-blowjob-safe':            'blowjobSafe_v1.safetensors',
+  'novita-blowbang-ultimate':       'blowbangUltimate_v1.safetensors',
+  'novita-doggystyle-safe':         'doggystyleSafe_v1.safetensors',
+  'novita-missionary-safe':         'missionarySafe_v1.safetensors',
+  'novita-titfuck':                 'titfuck_v1.safetensors',
+  'novita-futanari-diffusion':      'futanariDiffusion_v1.safetensors',
+  'novita-gay-diffusion':           'gayDiffusion_v1.safetensors',
+  'novita-homoerotic':              'homoerotic_v1.safetensors',
+  'novita-homoerotic-unstable':     'homoerotixUnstable_v1.safetensors',
+  'novita-manly-nudes':             'manlyNudes_v1.safetensors',
+  'novita-virile-reality':          'virileReality_v3.safetensors',
+  'novita-transformix':             'transformix_v1.safetensors',
+  // Inpainting
+  'novita-anything-inpainting':     'anything-v5-PrtRE.safetensors',
+  'novita-chillout-inpainting':     'chilloutmix_NiPrunedFp32Fix.safetensors',
+  'novita-men-inpainting':          'men_inpainting_v1.safetensors',
+  'novita-photography-inpainting':  'photography_v1.safetensors',
+  'novita-sd15-inpainting':         'v1-5-pruned-emaonly.safetensors',
+  'novita-urpm-inpainting':         'URPM_v1.3.safetensors',
+};
+
+// NovitaAI 文字生成圖片（非同步輪詢，後端等待結果）
+async function novitaTextToImage(modelName, prompt, negativePrompt, width, height) {
+  const apiKey = process.env.NOVITA_API_KEY;
+  if (!apiKey) throw new Error('NOVITA_API_KEY 未設定，請至 Railway 環境變數新增');
+
+  // 提交任務
+  const submitRes = await fetch('https://api.novita.ai/v3/async/txt2img', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model_name: modelName,
+      prompt,
+      negative_prompt: negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy',
+      width:  Math.min(Math.max(width  || 512, 256), 1024),
+      height: Math.min(Math.max(height || 768, 256), 1024),
+      steps: 20,
+      cfg_scale: 7,
+      sampler_name: 'DPM++ 2M Karras',
+      image_num: 1,
+      seed: -1,
+    }),
+  });
+  if (!submitRes.ok) {
+    const err = await submitRes.json().catch(() => ({}));
+    throw new Error(`NovitaAI 提交失敗: ${err.message || err.reason || submitRes.status}`);
+  }
+  const { task_id } = await submitRes.json();
+
+  // 輪詢結果（每 3 秒，最多 3 分鐘）
+  for (let i = 0; i < 60; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollRes = await fetch(`https://api.novita.ai/v3/async/task-result?task_id=${task_id}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    if (!pollRes.ok) continue;
+    const data = await pollRes.json();
+    const status = data.task?.status;
+    if (status === 'TASK_STATUS_SUCCEED') {
+      const url = data.images?.[0]?.image_url;
+      if (!url) throw new Error('NovitaAI：未返回圖片 URL');
+      return url;
+    }
+    if (status === 'TASK_STATUS_FAILED') {
+      throw new Error(`NovitaAI 生成失敗: ${data.task?.reason || '未知錯誤'}`);
+    }
+  }
+  throw new Error('NovitaAI 生成超時（3 分鐘），點數已退還');
+}
 
 // 偵測是否含有中文字元
 function hasChinese(text) {
@@ -131,12 +269,20 @@ function checkCredits(type) {
   };
 }
 
+// 社群模型（直接使用用戶選擇的模型，不走 quality 對應）
+const COMMUNITY_MODEL_IDS = new Set(['sdxl', 'dreamshaper-xl', 'realistic-vision', 'anything-v5', 'deliberate-v2']);
+
 // 文字生成圖片
 router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), async (req, res) => {
-  const { prompt, negative_prompt, width = 1024, height = 1024, style = 'none', quality = 'standard' } = req.body;
-  // 根據品質等級決定模型和參數
-  const qParams = QUALITY_PARAMS[quality] || QUALITY_PARAMS['standard'];
-  const model = qParams.model;
+  const { prompt, negative_prompt, width = 1024, height = 1024, style = 'none', quality = 'standard', model: reqModel = '' } = req.body;
+  // NovitaAI / 社群模型直接使用；FLUX 系列走 quality 對應
+  let model;
+  if (reqModel in NOVITA_MODELS || COMMUNITY_MODEL_IDS.has(reqModel)) {
+    model = reqModel;
+  } else {
+    const qParams = QUALITY_PARAMS[quality] || QUALITY_PARAMS['standard'];
+    model = qParams.model;
+  }
   if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
 
   const id = uuidv4();
@@ -144,6 +290,7 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
     id, user_id: req.user.id, type: 'text-to-image',
     prompt, negative_prompt: negative_prompt || null, model,
     width, height, image_url: null, status: 'processing',
+    is_public: true,
     credit_cost: req.creditCost,
     created_at: new Date().toISOString()
   });
@@ -154,17 +301,31 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
 
   try {
     const finalPrompt = await preparePrompt(prompt, style);
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
-    const modelId = MODELS[model] || MODELS['flux-schnell'];
-    let input = { prompt: finalPrompt };
     // 合併負面提示詞
     const styleNeg = STYLE_NEGATIVE[style] || '';
     const fullNeg = [negative_prompt, styleNeg].filter(Boolean).join(', ');
-    if (model === 'flux-schnell' || model === 'flux-dev' || model === 'flux-1.1-pro') {
+
+    // ── NovitaAI 分支（69 個 SEXY.AI 同款模型）────────────────
+    if (model in NOVITA_MODELS) {
+      const imageUrl = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height);
+      await db.updateOne('generations', { id }, { image_url: imageUrl, status: 'completed', prompt_en: finalPrompt });
+      const updatedUser = await db.findOne('users', { id: req.user.id });
+      return res.json({ id, image_url: imageUrl, status: 'completed', credits: updatedUser.credits });
+    }
+
+    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+    const modelId = MODELS[model] || MODELS['flux-schnell'];
+    let input = { prompt: finalPrompt };
+    if (FLUX_MODELS.has(model)) {
       input.aspect_ratio = getAspectRatio(width, height);
     } else {
-      input.width = width; input.height = height;
+      const maxRes = SD15_MODELS.has(model) ? 768 : 1024;
+      input.width  = Math.min(width,  maxRes);
+      input.height = Math.min(height, maxRes);
       if (fullNeg) input.negative_prompt = fullNeg;
+      input.guidance_scale       = 7.5;
+      input.num_inference_steps  = SD15_MODELS.has(model) ? 30 : 25;
+      input.num_outputs           = 1;
     }
 
     // 更新記錄儲存翻譯後的提示詞
@@ -202,6 +363,7 @@ router.post('/image-to-image', authMiddleware, checkCredits('image-to-image'), u
   await db.insertOne('generations', {
     id, user_id: req.user.id, type: 'image-to-image',
     prompt, model: 'sdxl', image_url: null, status: 'processing',
+    is_public: true,
     credit_cost: req.creditCost, created_at: new Date().toISOString()
   });
 
@@ -309,7 +471,7 @@ router.get('/job/:predictionId', authMiddleware, async (req, res) => {
 
 // 文字生成影片（非同步）
 router.post('/text-to-video', authMiddleware, checkCredits('text-to-video'), async (req, res) => {
-  const { prompt, aspect_ratio = '16:9' } = req.body;
+  const { prompt, aspect_ratio = '16:9', style = 'none', video_model = 'kling-v3' } = req.body;
   if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
 
   const id = uuidv4();
@@ -317,20 +479,27 @@ router.post('/text-to-video', authMiddleware, checkCredits('text-to-video'), asy
   await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
 
   try {
-    const finalPrompt = await preparePrompt(prompt);
+    const finalPrompt = await preparePrompt(prompt, style);
 
-    // 非同步提交（立即得到 predictionId，不等待結果）
-    const prediction = await createModelPrediction(
-      'kwaivgi/kling-v3-video',
-      { prompt: finalPrompt, duration: 5, aspect_ratio, mode: 'standard' },
-      process.env.REPLICATE_API_TOKEN
-    );
+    let predModel, predInput, modelName;
+    if (video_model === 'hunyuan') {
+      predModel = 'tencent/hunyuan-video';
+      predInput = { prompt: finalPrompt, aspect_ratio, num_frames: 61, fps: 24 };
+      modelName = 'hunyuan-video';
+    } else {
+      predModel = 'kwaivgi/kling-v3-video';
+      predInput = { prompt: finalPrompt, duration: 5, aspect_ratio, mode: 'standard' };
+      modelName = 'kling-v3';
+    }
+
+    const prediction = await createModelPrediction(predModel, predInput, process.env.REPLICATE_API_TOKEN);
 
     await db.insertOne('generations', {
       id, user_id: req.user.id, type: 'text-to-video',
-      prompt, prompt_en: finalPrompt, model: 'kling-v3',
+      prompt, prompt_en: finalPrompt, model: modelName,
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
+      is_public: true,
       credit_cost: req.creditCost, created_at: new Date().toISOString()
     });
 
@@ -346,7 +515,7 @@ router.post('/text-to-video', authMiddleware, checkCredits('text-to-video'), asy
 
 // 圖片生成影片（非同步，使用 Wan I2V 替換已廢棄的 SVD）
 router.post('/image-to-video', authMiddleware, checkCredits('image-to-video'), upload.single('image'), async (req, res) => {
-  const { prompt = '' } = req.body;
+  const { prompt = '', style = 'none', video_model = 'kling-omni' } = req.body;
   if (!req.file) return res.status(400).json({ error: '請上傳圖片' });
 
   const id = uuidv4();
@@ -358,20 +527,27 @@ router.post('/image-to-video', authMiddleware, checkCredits('image-to-video'), u
     const base64Image = `data:${req.file.mimetype};base64,${imageData.toString('base64')}`;
     fs.unlinkSync(req.file.path);
 
-    const finalPrompt = prompt ? await preparePrompt(prompt) : 'smooth camera motion, high quality video';
+    const finalPrompt = prompt ? await preparePrompt(prompt, style) : 'smooth cinematic motion, high quality video';
 
-    // 使用 Kling 3.0 Omni I2V（圖片轉影片）
-    const prediction = await createModelPrediction(
-      'kwaivgi/kling-v3-omni-video',
-      { start_image: base64Image, prompt: finalPrompt || 'smooth cinematic motion, high quality video', duration: 5, mode: 'standard' },
-      process.env.REPLICATE_API_TOKEN
-    );
+    let predModel, predInput, modelName;
+    if (video_model === 'svd') {
+      predModel = 'stability-ai/stable-video-diffusion';
+      predInput = { input_image: base64Image, video_length: '25_frames_with_svd_xt', sizing_strategy: 'crop_resize_center', motion_bucket_id: 127, fps_id: 6 };
+      modelName = 'svd';
+    } else {
+      predModel = 'kwaivgi/kling-v3-omni-video';
+      predInput = { start_image: base64Image, prompt: finalPrompt, duration: 5, mode: 'standard' };
+      modelName = 'kling-v3-omni';
+    }
+
+    const prediction = await createModelPrediction(predModel, predInput, process.env.REPLICATE_API_TOKEN);
 
     await db.insertOne('generations', {
       id, user_id: req.user.id, type: 'image-to-video',
-      prompt, model: 'kling-v3-omni',
+      prompt, model: modelName,
       prediction_id: prediction.id,
       video_url: null, status: 'processing',
+      is_public: true,
       credit_cost: req.creditCost, created_at: new Date().toISOString()
     });
 
@@ -384,6 +560,66 @@ router.post('/image-to-video', authMiddleware, checkCredits('image-to-video'), u
     res.status(500).json({ error: '影片任務提交失敗: ' + err.message });
   }
 });
+
+// ── 局部重繪 (Inpainting) ──────────────────────────────────────────
+router.post('/inpaint', authMiddleware, checkCredits('inpaint'),
+  upload.fields([{ name: 'image', maxCount: 1 }, { name: 'mask', maxCount: 1 }]),
+  async (req, res) => {
+    const { prompt, style = 'none' } = req.body;
+    if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
+    if (!req.files?.image?.[0]) return res.status(400).json({ error: '請上傳原始圖片' });
+    if (!req.files?.mask?.[0])  return res.status(400).json({ error: '請上傳遮罩圖片（白色 = 重繪區域）' });
+
+    const imagePath = req.files.image[0].path;
+    const maskPath  = req.files.mask[0].path;
+    const id = uuidv4();
+
+    const user = await db.findOne('users', { id: req.user.id });
+    await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
+
+    try {
+      const imageData = fs.readFileSync(imagePath);
+      const maskData  = fs.readFileSync(maskPath);
+      const base64Image = `data:${req.files.image[0].mimetype};base64,${imageData.toString('base64')}`;
+      const base64Mask  = `data:${req.files.mask[0].mimetype};base64,${maskData.toString('base64')}`;
+      fs.unlinkSync(imagePath);
+      fs.unlinkSync(maskPath);
+
+      const finalPrompt = await preparePrompt(prompt, style);
+      const replicate   = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+
+      const output = await replicate.run('stability-ai/stable-diffusion-inpainting', {
+        input: {
+          prompt: finalPrompt,
+          image:  base64Image,
+          mask:   base64Mask,
+          num_inference_steps: 25,
+          guidance_scale: 7.5,
+          num_outputs: 1,
+        }
+      });
+
+      const imageUrl = Array.isArray(output) ? output[0] : String(output);
+      await db.insertOne('generations', {
+        id, user_id: req.user.id, type: 'inpaint',
+        prompt, model: 'sdxl-inpaint',
+        image_url: imageUrl, status: 'completed',
+        is_public: true,
+        credit_cost: req.creditCost, created_at: new Date().toISOString()
+      });
+
+      const updatedUser = await db.findOne('users', { id: req.user.id });
+      res.json({ id, image_url: imageUrl, status: 'completed', credits: updatedUser.credits });
+    } catch (err) {
+      [imagePath, maskPath].forEach(p => { try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {} });
+      const u = await db.findOne('users', { id: req.user.id });
+      await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
+      await db.insertOne('generations', { id, user_id: req.user.id, type: 'inpaint', prompt, model: 'sdxl-inpaint', image_url: null, status: 'failed', credit_cost: req.creditCost, created_at: new Date().toISOString() });
+      console.error('局部重繪失敗:', err.message);
+      res.status(500).json({ error: '局部重繪失敗: ' + err.message });
+    }
+  }
+);
 
 router.get('/models', authMiddleware, (req, res) => {
   res.json({

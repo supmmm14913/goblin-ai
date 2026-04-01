@@ -3,7 +3,7 @@ import axios from 'axios'
 import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Link, useSearchParams } from 'react-router-dom'
-import { User, Link2, Lock, Mail, Coins, Copy, Check, Eye, EyeOff, ExternalLink } from 'lucide-react'
+import { User, Link2, Lock, Mail, Coins, Copy, Check, Eye, EyeOff, ExternalLink, Image, Video, Play, Globe, Trash2 } from 'lucide-react'
 
 const PLANS = [
   {
@@ -40,11 +40,12 @@ const PLANS = [
 ]
 
 const TABS = [
-  { id: 'profile',  icon: <User size={15} />,   label: '個人資料' },
-  { id: 'referral', icon: <Link2 size={15} />,  label: '推薦連結' },
-  { id: 'password', icon: <Lock size={15} />,   label: '修改密碼' },
-  { id: 'email',    icon: <Mail size={15} />,   label: '修改信箱' },
-  { id: 'credits',  icon: <Coins size={15} />,  label: '購買點數' },
+  { id: 'profile',   icon: <User size={15} />,   label: '個人資料' },
+  { id: 'portfolio', icon: <Image size={15} />,  label: '我的作品集' },
+  { id: 'referral',  icon: <Link2 size={15} />,  label: '推薦連結' },
+  { id: 'password',  icon: <Lock size={15} />,   label: '修改密碼' },
+  { id: 'email',     icon: <Mail size={15} />,   label: '修改信箱' },
+  { id: 'credits',   icon: <Coins size={15} />,  label: '購買點數' },
 ]
 
 export default function Settings() {
@@ -56,6 +57,12 @@ export default function Settings() {
   const [buyLoading, setBuyLoading] = useState(null)
   const [showManual, setShowManual] = useState(false)
   const [selectedPlan, setSelectedPlan] = useState(null)
+
+  // 作品集
+  const [portfolio, setPortfolio] = useState({ records: [], total: 0, totalPages: 1 })
+  const [portfolioPage, setPortfolioPage] = useState(1)
+  const [portfolioFilter, setPortfolioFilter] = useState('')
+  const [portfolioLoading, setPortfolioLoading] = useState(false)
 
   // 修改密碼
   const [pwForm, setPwForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
@@ -69,6 +76,39 @@ export default function Settings() {
   useEffect(() => {
     axios.get('/auth/me').then(r => setProfile(r.data.user)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (tab !== 'portfolio') return
+    setPortfolioLoading(true)
+    axios.get('/portfolio/me', { params: { type: portfolioFilter || undefined, page: portfolioPage, limit: 12 } })
+      .then(r => setPortfolio(r.data))
+      .catch(() => {})
+      .finally(() => setPortfolioLoading(false))
+  }, [tab, portfolioFilter, portfolioPage])
+
+  const toggleVisibility = async (genId, current) => {
+    try {
+      const res = await axios.put(`/portfolio/${genId}/visibility`)
+      setPortfolio(prev => ({
+        ...prev,
+        records: prev.records.map(r => r.id === genId ? { ...r, is_public: res.data.is_public } : r)
+      }))
+      toast.success(res.data.is_public ? '已設為公開' : '已設為私密')
+    } catch { toast.error('更新失敗') }
+  }
+
+  const deleteGen = async (genId) => {
+    if (!confirm('確定要刪除此作品嗎？')) return
+    try {
+      await axios.delete(`/portfolio/${genId}`)
+      setPortfolio(prev => ({
+        ...prev,
+        records: prev.records.filter(r => r.id !== genId),
+        total: prev.total - 1
+      }))
+      toast.success('已刪除')
+    } catch { toast.error('刪除失敗') }
+  }
 
   const referralLink = profile?.referral_code
     ? `${window.location.origin}/register?ref=${profile.referral_code}`
@@ -170,6 +210,102 @@ export default function Settings() {
             <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/20 rounded-xl p-3">
               <span className="text-red-400 text-xs font-bold">👑 管理員帳號</span>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* 我的作品集 */}
+      {tab === 'portfolio' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-lg">我的作品集</h2>
+              <p className="text-white/40 text-sm mt-0.5">管理你的圖片和影片，切換公開或私密狀態</p>
+            </div>
+            <Link to="/explore" className="flex items-center gap-1.5 text-xs text-white/40 hover:text-neon transition-colors">
+              <Globe size={12} />瀏覽探索頁
+            </Link>
+          </div>
+
+          {/* 篩選 */}
+          <div className="flex gap-2">
+            {[{ v: '', label: '全部' }, { v: 'text-to-image', label: '圖片' }, { v: 'text-to-video', label: '影片' }].map(f => (
+              <button key={f.v} onClick={() => { setPortfolioFilter(f.v); setPortfolioPage(1) }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${portfolioFilter === f.v ? 'bg-[#c8ff3e] text-black' : 'bg-white/5 text-white/40 hover:text-white'}`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {portfolioLoading ? (
+            <div className="flex items-center justify-center py-16">
+              <div className="w-6 h-6 border-2 border-[#c8ff3e] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : portfolio.records.length === 0 ? (
+            <div className="py-16 text-center bg-white/3 rounded-2xl border border-white/8">
+              <p className="text-white/30 mb-3">還沒有作品</p>
+              <Link to="/generate" className="btn-neon text-sm">立即生成</Link>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {portfolio.records.map(item => {
+                  const isVideo = item.type === 'text-to-video' || item.type === 'image-to-video'
+                  const url = isVideo ? item.video_url : item.image_url
+                  if (!url) return null
+                  return (
+                    <div key={item.id} className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/8">
+                      {isVideo ? (
+                        <div className="aspect-video bg-black flex items-center justify-center">
+                          <Play size={20} className="text-white/40" />
+                        </div>
+                      ) : (
+                        <img src={url} alt={item.prompt} className="w-full aspect-square object-cover" loading="lazy" />
+                      )}
+                      {/* Overlay */}
+                      <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
+                        <div className="flex justify-end gap-1">
+                          <button onClick={() => toggleVisibility(item.id, item.is_public)}
+                            title={item.is_public ? '設為私密' : '設為公開'}
+                            className={`p-1.5 rounded-lg transition-colors ${item.is_public ? 'bg-[#c8ff3e]/20 text-neon hover:bg-[#c8ff3e]/30' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}>
+                            <Globe size={13} />
+                          </button>
+                          <button onClick={() => deleteGen(item.id)}
+                            className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                        <div>
+                          <p className="text-xs text-white/70 line-clamp-2">{item.prompt}</p>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className={`text-xs px-1.5 py-0.5 rounded-full ${item.is_public ? 'bg-[#c8ff3e]/20 text-neon' : 'bg-white/10 text-white/40'}`}>
+                              {item.is_public ? '公開' : '私密'}
+                            </span>
+                            <span className="text-white/30 text-xs">{new Date(item.created_at).toLocaleDateString('zh-TW')}</span>
+                          </div>
+                        </div>
+                      </div>
+                      {/* Visibility badge (always visible) */}
+                      {!item.is_public && (
+                        <div className="absolute top-1.5 left-1.5 bg-black/60 backdrop-blur rounded-full px-2 py-0.5 text-xs text-white/50">私密</div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+
+              {portfolio.totalPages > 1 && (
+                <div className="flex justify-center gap-2 pt-2">
+                  <button disabled={portfolioPage <= 1} onClick={() => setPortfolioPage(p => p - 1)}
+                    className="px-4 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-sm disabled:opacity-30 transition-colors">上一頁</button>
+                  <span className="px-3 py-1.5 text-white/40 text-sm">{portfolioPage} / {portfolio.totalPages}</span>
+                  <button disabled={portfolioPage >= portfolio.totalPages} onClick={() => setPortfolioPage(p => p + 1)}
+                    className="px-4 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg text-sm disabled:opacity-30 transition-colors">下一頁</button>
+                </div>
+              )}
+
+              <p className="text-xs text-white/25 text-center">點擊作品可切換公開/私密狀態 · 公開作品可在探索頁面被其他用戶搜尋到</p>
+            </>
           )}
         </div>
       )}

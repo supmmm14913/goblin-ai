@@ -13,6 +13,8 @@ import Admin from './pages/Admin'
 import Settings from './pages/Settings'
 import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
+import Portfolio from './pages/Portfolio'
+import Explore from './pages/Explore'
 
 function PrivateRoute({ children }) {
   const { user, loading } = useAuth()
@@ -79,6 +81,10 @@ export default function App() {
 
           {/* 管理後台 */}
           <Route path="/admin" element={<AdminRoute><AppLayout><Admin /></AppLayout></AdminRoute>} />
+
+          {/* 公開頁面 */}
+          <Route path="/explore" element={<Explore />} />
+          <Route path="/u/:username" element={<Portfolio />} />
 
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

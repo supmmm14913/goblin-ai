@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Sparkles, History, LogOut, Coins, Shield, Video, Image, Settings, ChevronDown, User } from 'lucide-react'
+import { Sparkles, History, LogOut, Coins, Shield, Video, Image, Settings, ChevronDown, User, Globe } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 
 export default function Navbar() {
@@ -53,8 +53,11 @@ export default function Navbar() {
               <Link to="/generate?tab=text-video" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${location.search.includes('video') ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
                 <Video size={14} />影片
               </Link>
-              <Link to="/history" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive('/history') ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+              <Link to="/settings?tab=portfolio" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${location.search.includes('portfolio') ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
                 <History size={14} />作品集
+              </Link>
+              <Link to="/explore" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive('/explore') ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
+                <Globe size={14} />探索
               </Link>
               {user.role === 'admin' && (
                 <Link to="/admin" className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${isActive('/admin') ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white hover:bg-white/5'}`}>
@@ -97,6 +100,14 @@ export default function Navbar() {
                           className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors">
                           <User size={14} />個人資料
                         </Link>
+                        <Link to="/settings?tab=portfolio" onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors">
+                          <History size={14} />我的作品集
+                        </Link>
+                        <Link to="/explore" onClick={() => setDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors">
+                          <Globe size={14} />探索所有作品
+                        </Link>
                         <Link to="/settings?tab=referral" onClick={() => setDropdownOpen(false)}
                           className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-white/70 hover:bg-white/5 hover:text-white transition-colors">
                           <Sparkles size={14} />推薦連結
@@ -128,6 +139,7 @@ export default function Navbar() {
               </>
             ) : (
               <div className="flex items-center gap-2">
+                <Link to="/explore" className="btn-ghost hidden sm:block">探索</Link>
                 <Link to="/pricing" className="btn-ghost hidden sm:block">定價</Link>
                 <Link to="/login" className="btn-ghost">登入</Link>
                 <Link to="/register" className="btn-neon py-1.5 px-4 text-xs">免費開始</Link>

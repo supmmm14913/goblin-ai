@@ -37,6 +37,7 @@ const VIDEO_STYLES = [
 const TABS = [
   { id: 'text-image',  label: '文字→圖片', icon: '🖼️', cost: 2 },
   { id: 'image-image', label: '圖→圖',     icon: '🔄', cost: 3 },
+  { id: 'inpaint',     label: '局部重繪',   icon: '🎭', cost: 3, badge: 'NEW' },
   { id: 'text-video',  label: '文字→影片', icon: '🎬', cost: 5, badge: 'Kling 3.0' },
   { id: 'image-video', label: '圖→影片',   icon: '✨', cost: 5, badge: 'Kling 3.0' },
 ]
@@ -50,10 +51,136 @@ const QUALITY_LEVELS = [
 ]
 
 const MODELS = [
-  { id: 'flux-schnell',  name: 'FLUX Schnell',   desc: '最快速 · 推薦', badge: '推薦' },
-  { id: 'flux-dev',      name: 'FLUX Dev',        desc: '高品質細節' },
-  { id: 'flux-1.1-pro',  name: 'FLUX 1.1 Pro',   desc: '頂級 · 最新', badge: 'NEW' },
-  { id: 'sdxl',          name: 'SDXL',            desc: '通用模型' },
+  { id: 'flux-schnell',     name: 'FLUX Schnell',      desc: '最快速 · 推薦',  badge: '推薦' },
+  { id: 'flux-dev',         name: 'FLUX Dev',           desc: '高品質細節' },
+  { id: 'flux-1.1-pro',     name: 'FLUX 1.1 Pro',      desc: '頂級 · 最新',   badge: 'PRO' },
+  { id: 'sdxl',             name: 'SDXL',               desc: '通用多風格' },
+  { id: 'dreamshaper-xl',   name: 'Dreamshaper XL',    desc: '奇幻 / 藝術' },
+  { id: 'realistic-vision', name: 'Realistic Vision',  desc: '攝影寫實人像' },
+  { id: 'anything-v5',      name: 'Anything V5',        desc: '日系動漫' },
+  { id: 'deliberate-v2',    name: 'Deliberate V2',      desc: '多風格混合' },
+]
+
+// ── 完整模型分類（含 69 個 SEXY.AI / NovitaAI 模型）──────────────
+const MODEL_CATEGORIES = [
+  {
+    id: 'flux', label: 'FLUX（推薦）', emoji: '⚡',
+    models: [
+      { id: 'flux-schnell',   name: 'FLUX Schnell',   desc: '最快速 · 免費推薦', badge: '推薦' },
+      { id: 'flux-dev',       name: 'FLUX Dev',        desc: '高品質細節' },
+      { id: 'flux-1.1-pro',   name: 'FLUX 1.1 Pro',   desc: '頂級 · 最新',      badge: 'PRO' },
+    ]
+  },
+  {
+    id: 'general', label: '寫實 / 通用', emoji: '📸',
+    models: [
+      { id: 'sdxl',                        name: 'SDXL',                    desc: '通用多風格' },
+      { id: 'realistic-vision',            name: 'Realistic Vision',        desc: '攝影寫實人像' },
+      { id: 'deliberate-v2',               name: 'Deliberate V2',           desc: '多風格混合' },
+      { id: 'novita-dreamshaper',          name: 'Dreamshaper 8',           desc: '夢幻細節', badge: 'HOT' },
+      { id: 'novita-chillout-mix',         name: 'ChilloutMix',             desc: '亞洲寫實美女', badge: 'HOT' },
+      { id: 'novita-deliberate',           name: 'Deliberate v2',           desc: '精細寫實' },
+      { id: 'novita-cyber-realistic',      name: 'CyberRealistic',          desc: '賽博寫實風格' },
+      { id: 'novita-cyber-realistic-revamp', name: 'CyberRealistic Revamp', desc: '升級寫實版' },
+      { id: 'novita-epic-photo',           name: 'Epic Photogasm X++',      desc: '超高清人像' },
+      { id: 'novita-epic-photo-v3',        name: 'Epic Photogasm V3',       desc: '攝影級畫質' },
+      { id: 'novita-epic-natural',         name: 'Epic Natural Beautiful',  desc: '自然美感' },
+      { id: 'novita-epic-realism',         name: 'Epic Realism',            desc: '超寫實自然光' },
+      { id: 'novita-photography',          name: 'Photography',             desc: '攝影風格' },
+      { id: 'novita-photon',               name: 'Photon',                  desc: '光感寫實' },
+      { id: 'novita-ghost-mix',            name: 'GhostMix',                desc: '鬼混風格' },
+      { id: 'novita-grounded-realistic',   name: 'Grounded Realistic Mix',  desc: '接地氣寫實' },
+      { id: 'novita-realistic-vision-v4',  name: 'Realistic Vision V4',     desc: '寫實人像 V4' },
+      { id: 'novita-realistic-vision-v5',  name: 'Realistic Vision V5',     desc: '寫實人像 V5' },
+      { id: 'novita-real-dream',           name: 'Real Dream',              desc: '夢幻寫實' },
+      { id: 'novita-reliberate',           name: 'Reliberate V2.4',         desc: '解放創意' },
+      { id: 'novita-rev-animated',         name: 'Rev Animated',            desc: '動畫風寫實' },
+      { id: 'novita-urpm',                 name: 'URPM',                    desc: '終極寫實人像' },
+      { id: 'novita-uhd',                  name: 'UHD 2.3',                 desc: '超高清細節' },
+      { id: 'novita-sd15',                 name: 'SD 1.5',                  desc: '基礎穩定擴散' },
+      { id: 'novita-lazymix',              name: 'LazyMix Real Amateur',    desc: '業餘寫實感' },
+      { id: 'novita-babes-v2',             name: 'Babes V2',                desc: '美女專用模型' },
+      { id: 'novita-experience',           name: 'Experience V2',           desc: '生活感寫實' },
+      { id: 'novita-bom',                  name: 'BoM',                     desc: '精緻混合' },
+      { id: 'novita-art-universe',         name: 'Art Universe',            desc: '藝術宇宙' },
+    ]
+  },
+  {
+    id: 'anime', label: '動漫 / 卡通', emoji: '🎌',
+    models: [
+      { id: 'anything-v5',                name: 'Anything V5',              desc: '日系動漫', badge: 'HOT' },
+      { id: 'dreamshaper-xl',             name: 'Dreamshaper XL',           desc: '奇幻插畫' },
+      { id: 'novita-anime',               name: 'MeinaMix Meina V11',       desc: '精美動漫', badge: 'HOT' },
+      { id: 'novita-anime-characters',    name: 'Anime Characters',         desc: '二次元角色' },
+      { id: 'novita-anything-v5',         name: 'Anything V5 (Novita)',     desc: '日系動漫' },
+      { id: 'novita-hassaku-hentai',      name: 'Hassaku Hentai',           desc: '日系成人動漫', badge: '18+' },
+      { id: 'novita-hentai-v2',           name: 'Hentai Diffusion V2',      desc: '成人動漫 V2',  badge: '18+' },
+      { id: 'novita-hardcore-hentai',     name: 'Hardcore Hentai',          desc: '重口成人動漫', badge: '18+' },
+      { id: 'novita-pony-diffusion',      name: 'Pony Diffusion XL V6',     desc: '彩虹小馬風格', badge: 'NSFW' },
+      { id: 'novita-dreamshaper-pixel',   name: 'Dreamshaper XL Lightning', desc: '快速動漫生成' },
+      { id: 'novita-real-cartoon-3d',     name: 'Real Cartoon 3D',          desc: '3D卡通寫實' },
+      { id: 'novita-toon-universe',       name: 'Toon Universe',            desc: '卡通宇宙風格' },
+      { id: 'novita-fantasy-mix',         name: 'Fantasy Mix',              desc: '奇幻動漫混合' },
+      { id: 'novita-porn-cartoon',        name: 'Porn Cartoon',             desc: '成人卡通',     badge: '18+' },
+    ]
+  },
+  {
+    id: 'adult', label: '成人 / 寫實 18+', emoji: '🔞',
+    models: [
+      { id: 'novita-abyss-orange-mix',    name: 'AbyssOrangeMix2 SFW',      desc: '深淵橙色混合' },
+      { id: 'novita-porn-merge',          name: 'Porn Master Pro',          desc: '成人專業版',   badge: '18+' },
+      { id: 'novita-porn-ultimate',       name: 'Porn Ultimate V3',         desc: '成人終極版',   badge: '18+' },
+      { id: 'novita-buxom-brits',         name: 'Buxom Brits',              desc: '英式豐腴風',   badge: '18+' },
+      { id: 'novita-clear-bondage',       name: 'Clear Bondage',            desc: '束縛風格',     badge: '18+' },
+      { id: 'novita-latex-vision',        name: 'Latex Vision',             desc: '乳膠服飾',     badge: '18+' },
+      { id: 'novita-vr-porn',             name: 'VR Porn V3',               desc: 'VR 成人風格',  badge: '18+' },
+      { id: 'novita-blowjob-safe',        name: 'Blowjob Safe',             desc: '口交場景模型', badge: '18+' },
+      { id: 'novita-blowbang-ultimate',   name: 'Blowbang Ultimate',        desc: '多人口交',     badge: '18+' },
+      { id: 'novita-doggystyle-safe',     name: 'Doggystyle Safe',          desc: '特殊體位模型', badge: '18+' },
+      { id: 'novita-missionary-safe',     name: 'Missionary Safe',          desc: '傳教士體位',   badge: '18+' },
+      { id: 'novita-titfuck',             name: 'Titfuck',                   desc: '胸部場景',     badge: '18+' },
+      { id: 'novita-futanari-diffusion',  name: 'Futanari Diffusion',       desc: '扶她成人風格', badge: '18+' },
+      { id: 'novita-gay-diffusion',       name: 'Gay Diffusion',            desc: '同性男性風格', badge: '18+' },
+      { id: 'novita-homoerotic',          name: 'Homoerotic',               desc: '男男情慾',     badge: '18+' },
+      { id: 'novita-homoerotic-unstable', name: 'Homoerotix Unstable',      desc: '男男情慾（不穩定）', badge: '18+' },
+      { id: 'novita-manly-nudes',         name: 'Manly Nudes',              desc: '男性裸體藝術', badge: '18+' },
+      { id: 'novita-virile-reality',      name: 'Virile Reality V3',        desc: '男性寫實',     badge: '18+' },
+      { id: 'novita-transformix',         name: 'Transformix',              desc: '變身幻想',     badge: '18+' },
+    ]
+  },
+  {
+    id: 'furry', label: 'Furry / 獸人', emoji: '🐾',
+    models: [
+      { id: 'novita-furry',               name: 'YiffyMix V34',             desc: '獸人通用', badge: 'NSFW' },
+      { id: 'novita-anime-furry',         name: 'Anime Furry',              desc: '動漫獸人', badge: 'NSFW' },
+      { id: 'novita-coconut-furry',       name: 'Coconut Furry Mix',        desc: '椰子獸人混合', badge: 'NSFW' },
+      { id: 'novita-pina-colada-furry',   name: 'Pina Colada Furry Mix',    desc: '鳳梨椰子獸人', badge: 'NSFW' },
+      { id: 'novita-persika-furry',       name: 'Persika Furry Realism',    desc: '寫實獸人', badge: 'NSFW' },
+      { id: 'novita-yiffy-mix',           name: 'YiffyMix (Alt)',           desc: '另類獸人', badge: 'NSFW' },
+      { id: 'novita-seel-real-furry',     name: 'SeelReal Furry',           desc: '真實獸人', badge: 'NSFW' },
+    ]
+  },
+  {
+    id: 'inpaint', label: 'Inpainting 專用', emoji: '🎭',
+    models: [
+      { id: 'novita-anything-inpainting',    name: 'Anything Inpainting',    desc: '動漫局部重繪' },
+      { id: 'novita-chillout-inpainting',    name: 'ChilloutMix Inpainting', desc: '寫實局部重繪' },
+      { id: 'novita-men-inpainting',         name: 'Men Inpainting',         desc: '男性局部重繪' },
+      { id: 'novita-photography-inpainting', name: 'Photography Inpainting', desc: '攝影局部重繪' },
+      { id: 'novita-sd15-inpainting',        name: 'SD 1.5 Inpainting',      desc: '基礎局部重繪' },
+      { id: 'novita-urpm-inpainting',        name: 'URPM Inpainting',        desc: '寫實人像重繪' },
+    ]
+  },
+]
+
+const VIDEO_T2V_MODELS = [
+  { id: 'kling-v3',  name: 'Kling V3',       desc: '快速生成', badge: '推薦' },
+  { id: 'hunyuan',   name: 'Hunyuan Video',  desc: '高品質影片', badge: 'NEW' },
+]
+
+const VIDEO_I2V_MODELS = [
+  { id: 'kling-omni', name: 'Kling V3 Omni',      desc: '圖轉影片', badge: '推薦' },
+  { id: 'svd',        name: 'Stable Video Diff.', desc: '平滑短片', badge: 'NEW' },
 ]
 
 const SIZES = [
@@ -98,6 +225,9 @@ export default function Generate() {
   const [loadingMsg, setLoadingMsg] = useState('')
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [showAdvanced, setShowAdvanced] = useState(false)
+  const [videoModel, setVideoModel] = useState('kling-v3')
+  const [maskImage, setMaskImage] = useState(null)
+  const [maskPreview, setMaskPreview] = useState(null)
 
   const onDrop = useCallback((files) => {
     const file = files[0]; if (!file) return
@@ -109,10 +239,23 @@ export default function Generate() {
     onDrop, accept: { 'image/*': [] }, maxFiles: 1, disabled: loading
   })
 
+  const onDropMask = useCallback((files) => {
+    const file = files[0]; if (!file) return
+    setMaskImage(file)
+    setMaskPreview(URL.createObjectURL(file))
+  }, [])
+  const { getRootProps: getMaskRootProps, getInputProps: getMaskInputProps, isDragActive: isMaskDragActive } = useDropzone({
+    onDrop: onDropMask, accept: { 'image/*': [] }, maxFiles: 1, disabled: loading
+  })
+
+  // 取得目前選中模型的顯示資訊
+  const allModelsList = MODEL_CATEGORIES.flatMap(c => c.models)
+  const currentModelInfo = allModelsList.find(m => m.id === model) || MODELS.find(m => m.id === model)
+
   const currentTab  = TABS.find(t => t.id === tab)
-  const needsImage  = tab === 'image-image' || tab === 'image-video'
+  const needsImage  = tab === 'image-image' || tab === 'image-video' || tab === 'inpaint'
   const isVideo     = tab === 'text-video'  || tab === 'image-video'
-  const isImage     = tab === 'text-image'  || tab === 'image-image'
+  const isImage     = tab === 'text-image'  || tab === 'image-image' || tab === 'inpaint'
   const activeStyles = isVideo ? VIDEO_STYLES : STYLES
   const currentStyle = activeStyles.find(s => s.id === style) || activeStyles[0]
   const currentQuality = QUALITY_LEVELS.find(q => q.id === quality) || QUALITY_LEVELS[0]
@@ -129,13 +272,15 @@ export default function Generate() {
   const handleGenerate = async () => {
     if (!prompt.trim() && tab !== 'image-video') return toast.error('請輸入提示詞')
     if (needsImage && !inputImage) return toast.error('請上傳參考圖片')
+    if (tab === 'inpaint' && !maskImage) return toast.error('請上傳遮罩圖片')
     if ((user?.credits ?? 0) < actualCost) {
       return toast.error(`點數不足！需要 ${actualCost} 點，目前剩 ${user?.credits ?? 0} 點`)
     }
 
     setLoading(true); setResult(null); setLoadingProgress(0)
     const hasChinese = /[\u4e00-\u9fff]/.test(prompt)
-    setLoadingMsg(hasChinese ? '🌐 偵測到中文，正在翻譯...' : isVideo ? '📤 提交影片任務...' : '✨ 生成中...')
+    const isNovita = model.startsWith('novita-')
+    setLoadingMsg(hasChinese ? '🌐 偵測到中文，正在翻譯...' : isVideo ? '📤 提交影片任務...' : isNovita ? '🎨 NovitaAI 生成中（約 30-90 秒）...' : '✨ 生成中...')
 
     // Optimistic credit deduction
     const previousCredits = user?.credits ?? 0
@@ -166,15 +311,31 @@ export default function Generate() {
         toast.success('圖片生成成功！')
         setLoading(false); setLoadingMsg('')
 
+      // ── 局部重繪（同步）
+      } else if (tab === 'inpaint') {
+        if (!maskImage) return toast.error('請上傳遮罩圖片')
+        const fd = new FormData()
+        fd.append('image', inputImage)
+        fd.append('mask', maskImage)
+        fd.append('prompt', styledPrompt)
+        fd.append('style', style)
+        const res = await axios.post('/generate/inpaint', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+        setResult(res.data.image_url); setResultType('image')
+        if (res.data.credits !== undefined) updateCredits(res.data.credits)
+        toast.success('局部重繪完成！')
+        setLoading(false); setLoadingMsg('')
+
       // ── 影片生成（非同步輪詢）
       } else {
         let submitRes
         if (tab === 'text-video') {
-          submitRes = await axios.post('/generate/text-to-video', { prompt: styledPrompt })
+          submitRes = await axios.post('/generate/text-to-video', { prompt: styledPrompt, style, video_model: videoModel })
         } else {
           const fd = new FormData()
           fd.append('image', inputImage)
           if (prompt) fd.append('prompt', styledPrompt)
+          fd.append('style', style)
+          fd.append('video_model', videoModel)
           submitRes = await axios.post('/generate/image-to-video', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
         }
 
@@ -226,11 +387,11 @@ export default function Generate() {
         {/* Tab */}
         <div className="bg-[#111114] border border-white/8 rounded-2xl p-1 grid grid-cols-4 gap-1">
           {TABS.map(t => (
-            <button key={t.id} onClick={() => { setTab(t.id); setResult(null); setStyle('none') }}
+            <button key={t.id} onClick={() => { setTab(t.id); setResult(null); setStyle('none'); setVideoModel(t.id === 'image-video' ? 'kling-omni' : 'kling-v3') }}
               className={`relative flex flex-col items-center py-2.5 rounded-xl text-xs font-semibold transition-all ${tab === t.id ? 'bg-white/10 text-white' : 'text-white/30 hover:text-white/60'}`}>
               <span className="text-lg mb-0.5">{t.icon}</span>
               <span className="text-[10px]">{t.label.split('→')[0]}</span>
-              <span className="text-[10px] text-white/30">→{t.label.split('→')[1]}</span>
+              {t.label.includes('→') && <span className="text-[10px] text-white/30">→{t.label.split('→')[1]}</span>}
               {t.badge && <span className="absolute -top-1 -right-1 badge-pink text-[9px] px-1 py-0">{t.badge}</span>}
             </button>
           ))}
@@ -246,21 +407,48 @@ export default function Generate() {
 
         {/* 圖片上傳 */}
         {needsImage && (
-          <div>
-            <label className="text-xs text-white/40 mb-2 block">參考圖片</label>
-            {inputImagePreview ? (
-              <div className="relative rounded-xl overflow-hidden aspect-video bg-[#111114]">
-                <img src={inputImagePreview} alt="preview" className="w-full h-full object-contain" />
-                <button onClick={() => { setInputImage(null); setInputImagePreview(null) }}
-                  className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
-                  <X size={13} />
-                </button>
-              </div>
-            ) : (
-              <div {...getRootProps()} className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${isDragActive ? 'border-[#c8ff3e]/60 bg-[#c8ff3e]/5' : 'border-white/10 hover:border-white/20'}`}>
-                <input {...getInputProps()} />
-                <Upload size={20} className="mx-auto mb-2 text-white/20" />
-                <p className="text-white/30 text-xs">拖放或點擊上傳圖片</p>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-white/40 mb-2 block">
+                {tab === 'inpaint' ? '① 原始圖片' : '參考圖片'}
+              </label>
+              {inputImagePreview ? (
+                <div className="relative rounded-xl overflow-hidden aspect-video bg-[#111114]">
+                  <img src={inputImagePreview} alt="preview" className="w-full h-full object-contain" />
+                  <button onClick={() => { setInputImage(null); setInputImagePreview(null) }}
+                    className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
+                    <X size={13} />
+                  </button>
+                </div>
+              ) : (
+                <div {...getRootProps()} className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${isDragActive ? 'border-[#c8ff3e]/60 bg-[#c8ff3e]/5' : 'border-white/10 hover:border-white/20'}`}>
+                  <input {...getInputProps()} />
+                  <Upload size={20} className="mx-auto mb-2 text-white/20" />
+                  <p className="text-white/30 text-xs">拖放或點擊上傳圖片</p>
+                </div>
+              )}
+            </div>
+
+            {/* 遮罩上傳（僅局部重繪）*/}
+            {tab === 'inpaint' && (
+              <div>
+                <label className="text-xs text-white/40 mb-1 block">② 遮罩圖片（白色區域 = 重繪範圍）</label>
+                <p className="text-[10px] text-white/25 mb-2">用 Photoshop / 小畫家 將要重繪的區域塗白，其餘保留黑色</p>
+                {maskPreview ? (
+                  <div className="relative rounded-xl overflow-hidden aspect-video bg-[#111114]">
+                    <img src={maskPreview} alt="mask" className="w-full h-full object-contain" />
+                    <button onClick={() => { setMaskImage(null); setMaskPreview(null) }}
+                      className="absolute top-2 right-2 w-7 h-7 bg-black/70 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <div {...getMaskRootProps()} className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-colors ${isMaskDragActive ? 'border-purple-400/60 bg-purple-500/5' : 'border-white/10 hover:border-purple-400/30'}`}>
+                    <input {...getMaskInputProps()} />
+                    <p className="text-2xl mb-1">🎭</p>
+                    <p className="text-white/30 text-xs">上傳遮罩圖片</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -318,20 +506,59 @@ export default function Generate() {
           </div>
         </div>
 
-        {/* 模型選擇（僅圖片）*/}
-        {tab === 'text-image' && (
+        {/* 影片模型選擇 */}
+        {isVideo && (
           <div>
-            <label className="text-xs text-white/40 mb-2 block">模型</label>
+            <label className="text-xs text-white/40 mb-2 block">影片模型</label>
             <div className="grid grid-cols-2 gap-2">
-              {MODELS.map(m => (
-                <button key={m.id} onClick={() => setModel(m.id)}
-                  className={`relative p-2.5 rounded-xl text-left text-xs border transition-all ${model === m.id ? 'border-[#c8ff3e]/40 bg-[#c8ff3e]/5 text-white' : 'border-white/8 bg-[#111114] text-white/40 hover:border-white/15'}`}>
+              {(tab === 'text-video' ? VIDEO_T2V_MODELS : VIDEO_I2V_MODELS).map(m => (
+                <button key={m.id} onClick={() => setVideoModel(m.id)}
+                  className={`relative p-2.5 rounded-xl text-left text-xs border transition-all ${videoModel === m.id ? 'border-[#c8ff3e]/40 bg-[#c8ff3e]/5 text-white' : 'border-white/8 bg-[#111114] text-white/40 hover:border-white/15'}`}>
                   {m.badge && <span className="absolute -top-1.5 -right-1.5 badge-neon text-[8px] px-1">{m.badge}</span>}
                   <div className="font-bold text-[11px]">{m.name}</div>
                   <div className="text-[10px] mt-0.5 text-white/30">{m.desc}</div>
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* 模型選擇（僅圖片）*/}
+        {tab === 'text-image' && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs text-white/40">模型</label>
+              {currentModelInfo?.badge && (
+                <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${currentModelInfo.badge === '18+' || currentModelInfo.badge === 'NSFW' ? 'bg-red-500/20 text-red-400' : 'bg-[#c8ff3e]/15'}`}
+                  style={currentModelInfo.badge !== '18+' && currentModelInfo.badge !== 'NSFW' ? {color:'#c8ff3e'} : {}}>
+                  {currentModelInfo.badge}
+                </span>
+              )}
+            </div>
+
+            {/* 原生下拉選單 */}
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              disabled={loading}
+              className="w-full bg-[#111114] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#c8ff3e]/40 cursor-pointer appearance-none"
+              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff40' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 12px center' }}
+            >
+              {MODEL_CATEGORIES.map(cat => (
+                <optgroup key={cat.id} label={`${cat.emoji} ${cat.label}`}>
+                  {cat.models.map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}{m.badge ? ` [${m.badge}]` : ''} — {m.desc}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+
+            {/* 目前選中模型說明 */}
+            {currentModelInfo && (
+              <p className="text-[10px] text-white/25 mt-1.5 px-1">{currentModelInfo.desc}</p>
+            )}
           </div>
         )}
 
@@ -439,8 +666,10 @@ export default function Generate() {
             </div>
             <div className="text-center">
               <p className="font-bold text-white">{isVideo ? 'Goblin AI 生成影片中...' : 'Goblin AI 生成圖片中...'}</p>
-              <p className="text-white/30 text-sm mt-1">{isVideo ? '影片約需 1-3 分鐘，請耐心等候' : '圖片約需 10-30 秒'}</p>
-              {loadingMsg && loadingMsg.includes('翻譯') && (
+              <p className="text-white/30 text-sm mt-1">
+                {isVideo ? '影片約需 1-3 分鐘，請耐心等候' : model.startsWith('novita-') ? '約需 30-90 秒，請耐心等候' : '圖片約需 10-30 秒'}
+              </p>
+              {loadingMsg && (loadingMsg.includes('翻譯') || loadingMsg.includes('NovitaAI')) && (
                 <p className="text-xs mt-2 animate-pulse" style={{color:'#c8ff3e'}}>{loadingMsg}</p>
               )}
               {style !== 'none' && (
