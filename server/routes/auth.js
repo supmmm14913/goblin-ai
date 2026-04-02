@@ -50,22 +50,26 @@ async function sendResetEmail(email, username, token, clientUrl) {
   }
 
   // ── 方案 2：Gmail SMTP（需設定 SMTP_USER / SMTP_PASS）
-  if (process.env.SMTP_USER && !process.env.SMTP_USER.startsWith('你的')) {
-    console.log(`[SMTP] 嘗試寄信給 ${email}，使用帳號 ${process.env.SMTP_USER}`);
+  const smtpUser = process.env.SMTP_USER || ''
+  const smtpPass = process.env.SMTP_PASS || ''
+  // 確認是真實的 email（含 @）且密碼不是佔位符
+  const smtpReady = smtpUser.includes('@') && smtpPass.length >= 8
+    && !smtpUser.startsWith('請填入') && !smtpPass.startsWith('請填入')
+  if (smtpReady) {
+    console.log(`[SMTP] 嘗試寄信給 ${email}，使用帳號 ${smtpUser}`);
     const nodemailer = require('nodemailer');
     const transporter = nodemailer.createTransport({
       host: process.env.SMTP_HOST || 'smtp.gmail.com',
       port: parseInt(process.env.SMTP_PORT || '587'),
       secure: false,
-      requireTLS: true,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      auth: { user: smtpUser, pass: smtpPass },
       tls: { rejectUnauthorized: false },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 15000,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
     });
     const info = await transporter.sendMail({
-      from: `"Goblin AI" <${process.env.SMTP_USER}>`,
+      from: `"Goblin AI" <${smtpUser}>`,
       to: email,
       subject: '【Goblin AI】重設你的密碼',
       html,
@@ -195,6 +199,10 @@ router.post('/forgot-password', async (req, res) => {
       errorMsg = '寄信次數已達上限，請稍後再試';
     } else if (msg.includes('Invalid email') || msg.includes('invalid_to')) {
       errorMsg = '信箱格式不正確，請確認後再試';
+    } else if (msg.includes('535') || msg.includes('Username and Password') || msg.includes('authentication') || msg.includes('BadCredentials')) {
+      errorMsg = 'Gmail 密碼驗證失敗，請確認使用的是 Gmail 應用程式密碼（16碼），而非帳號密碼';
+    } else if (msg.includes('ECONNREFUSED') || msg.includes('ETIMEDOUT') || msg.includes('ENOTFOUND')) {
+      errorMsg = 'SMTP 伺服器連線失敗，請確認設定正確';
     } else if (msg.length > 0) {
       errorMsg = `寄信失敗：${msg}`;
     }

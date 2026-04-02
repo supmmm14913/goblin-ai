@@ -55,8 +55,13 @@ export function openLightbox(url, info = {}) {
     'box-sizing:border-box',
     'cursor:zoom-out',
     'font-family:Inter,system-ui,sans-serif',
+    'touch-action:manipulation',
+    '-webkit-overflow-scrolling:touch',
   ].join(';'))
   backdrop.addEventListener('click', close)
+  backdrop.addEventListener('touchend', function(e) {
+    if (e.target === backdrop) { e.preventDefault(); close() }
+  }, { passive: false })
 
   /* ── Card ──────────────────────────────────────── */
   const card = document.createElement('div')

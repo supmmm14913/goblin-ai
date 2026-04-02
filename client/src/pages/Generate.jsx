@@ -226,6 +226,14 @@ export default function Generate() {
   const [publishedIds, setPublishedIds] = useState(new Set()) // 已領獎的 id
   const [dailyReward, setDailyReward] = useState({ today_count: 0, daily_limit: 5 })
 
+  // 手機版：生成完成後自動捲到結果區
+  useEffect(() => {
+    if (result && window.innerWidth < 768) {
+      const panel = document.getElementById('generate-result-panel')
+      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+  }, [result])
+
   // 從 URL ?prompt= 讀取提示詞（由 lightbox「複製到生成器」按鈕導向）
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -424,10 +432,10 @@ export default function Generate() {
   }
 
   return (
-    <div className="flex gap-4 h-[calc(100vh-120px)]">
+    <div className="flex flex-col md:flex-row gap-3 md:h-[calc(100vh-120px)]">
 
       {/* ── 左側控制面板 ─────────────────────────────── */}
-      <div className="w-[360px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto pr-1 pb-4">
+      <div className="w-full md:w-[360px] flex-shrink-0 flex flex-col gap-3 overflow-y-auto pb-4 md:pr-1">
 
         {/* Tab */}
         <div className="bg-[#111114] border border-white/8 rounded-2xl p-1 grid grid-cols-4 gap-1">
@@ -760,7 +768,7 @@ export default function Generate() {
       </div>
 
       {/* ── 右側結果區 ──────────────────────────────── */}
-      <div className="flex-1 bg-[#111114] border border-white/8 rounded-2xl overflow-hidden flex flex-col min-h-0">
+      <div id="generate-result-panel" className="flex-1 bg-[#111114] border border-white/8 rounded-2xl overflow-hidden flex flex-col min-h-[320px] md:min-h-0">
         {loading ? (
           <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8">
             <div className="relative w-20 h-20">
