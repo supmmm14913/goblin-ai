@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { useAuth } from '../context/AuthContext'
 import { Link, useSearchParams } from 'react-router-dom'
 import { User, Link2, Lock, Mail, Coins, Copy, Check, Eye, EyeOff, ExternalLink, Image, Video, Play, Globe, Trash2 } from 'lucide-react'
+import { openLightbox } from '../utils/lightbox'
 
 const PLANS = [
   {
@@ -254,23 +255,31 @@ export default function Settings() {
                   const url = isVideo ? item.video_url : item.image_url
                   if (!url) return null
                   return (
-                    <div key={item.id} className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/8">
+                    <div key={item.id} className="relative group rounded-xl overflow-hidden bg-white/5 border border-white/8"
+                      style={{ cursor: isVideo ? 'default' : 'zoom-in' }}
+                      onClick={() => { if (!isVideo) openLightbox(url, { prompt: item.prompt, model: item.model }) }}>
                       {isVideo ? (
                         <div className="aspect-video bg-black flex items-center justify-center">
                           <Play size={20} className="text-white/40" />
                         </div>
                       ) : (
-                        <img src={url} alt={item.prompt} className="w-full aspect-square object-cover" loading="lazy" />
+                        <img src={url} alt={item.prompt} className="w-full aspect-square object-cover" loading="lazy" style={{ pointerEvents: 'none' }} />
                       )}
                       {/* Overlay */}
                       <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-2">
                         <div className="flex justify-end gap-1">
-                          <button onClick={() => toggleVisibility(item.id, item.is_public)}
+                          {!isVideo && (
+                            <button onClick={e => { e.stopPropagation(); openLightbox(url, { prompt: item.prompt, model: item.model }) }}
+                              title="放大" className="p-1.5 rounded-lg bg-white/10 text-white/80 hover:bg-white/25 transition-colors text-xs font-bold">
+                              🔍
+                            </button>
+                          )}
+                          <button onClick={e => { e.stopPropagation(); toggleVisibility(item.id, item.is_public) }}
                             title={item.is_public ? '設為私密' : '設為公開'}
                             className={`p-1.5 rounded-lg transition-colors ${item.is_public ? 'bg-[#c8ff3e]/20 text-neon hover:bg-[#c8ff3e]/30' : 'bg-white/10 text-white/50 hover:bg-white/20'}`}>
                             <Globe size={13} />
                           </button>
-                          <button onClick={() => deleteGen(item.id)}
+                          <button onClick={e => { e.stopPropagation(); deleteGen(item.id) }}
                             className="p-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
                             <Trash2 size={13} />
                           </button>
