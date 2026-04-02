@@ -226,7 +226,7 @@ async function translateChunk(chunk) {
 // ── 公眾人物外觀資料庫（英文 SD 最佳化關鍵詞，直接注入翻譯後的提詞）
 const CELEBRITY_DB_EN = {
   // ── 台灣政治人物 ─────────────────────────────────────────────
-  '陳時中':  'Chen Shih-chung, elderly Taiwanese male, 74 years old, round chubby face with full cheeks and age wrinkles, short salt-and-pepper dark grey hair thinning on top, small warm friendly eyes, thin dark rectangular-framed glasses, stocky short overweight build, dark navy blue business suit, gold yellow necktie, East Asian complexion, warm approachable smile',
+  '陳時中':  'portrait of Chen Shih-chung, 74-year-old Taiwanese male politician, round fleshy chubby face full cheeks age spots wrinkles, short silver grey salt-and-pepper hair, warm friendly squinting eyes, thin-framed rectangular eyeglasses, stocky overweight short build, formal dark navy blue suit jacket white dress shirt gold yellow tie, plain background, East Asian complexion, no other people, photorealistic',
   '蔡英文':  'Tsai Ing-wen, Taiwanese female politician, 68 years old, short black bob haircut, petite slim figure, dark formal business suit, dignified composed expression, East Asian complexion',
   '賴清德':  'Lai Ching-te, Taiwanese male politician, 65 years old, short black hair, slender trim build, dark formal business suit with tie, confident expression, East Asian complexion',
   '柯文哲':  'Ko Wen-je, Taiwanese male, 56 years old, extremely short buzz-cut black hair, slim tall lanky build, polo shirt or casual suit jacket, sharp intense piercing gaze, prominent cheekbones, East Asian complexion',
