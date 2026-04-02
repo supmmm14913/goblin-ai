@@ -68,6 +68,73 @@ const NOVITA_MODELS = {
   'novita-sdxl':               'sd_xl_base_1.0.safetensors',
 };
 
+// NovitaAI 圖片轉圖片（img2img）
+async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7, width = 768, height = 768) {
+  const apiKey = process.env.NOVITA_API_KEY;
+  if (!apiKey) throw new Error('NOVITA_API_KEY 未設定');
+
+  // 去除 data URL 前綴，NovitaAI 只接受純 base64
+  const base64Data = imageBase64.replace(/^data:image\/[a-z+]+;base64,/, '');
+  const safePrompt = prompt.length > 1024 ? prompt.slice(0, 1024) : prompt;
+
+  const isXL = modelName.includes('xl') || modelName.includes('XL');
+  const maxRes = isXL ? 1024 : 768;
+  const reqW = Math.min(Math.max(Math.round(width  / 64) * 64, 256), maxRes);
+  const reqH = Math.min(Math.max(Math.round(height / 64) * 64, 256), maxRes);
+
+  const body = {
+    request: {
+      model_name:       modelName,
+      image_base64:     base64Data,
+      prompt:           safePrompt,
+      negative_prompt:  'ugly, blurry, low quality, watermark, text, logo, bad anatomy, deformed',
+      strength:         Math.min(Math.max(parseFloat(strength), 0.1), 1.0),
+      width:            reqW,
+      height:           reqH,
+      steps:            25,
+      guidance_scale:   7,
+      sampler_name:     'Euler a',
+      image_num:        1,
+      seed:             -1,
+    }
+  };
+  console.log('[NovitaAI img2img] 提交:', { model_name: modelName, strength, width: reqW, height: reqH });
+
+  const submitRes = await fetch('https://api.novita.ai/v3/async/img2img', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!submitRes.ok) {
+    const errBody = await submitRes.text().catch(() => '');
+    console.error('[NovitaAI img2img] 提交失敗:', submitRes.status, errBody);
+    throw new Error(`NovitaAI img2img 提交失敗 (${submitRes.status}): ${errBody}`);
+  }
+  const { task_id } = await submitRes.json();
+
+  // 輪詢（每 3 秒，最多 2 分鐘）
+  for (let i = 0; i < 40; i++) {
+    await new Promise(r => setTimeout(r, 3000));
+    const pollRes = await fetch(`https://api.novita.ai/v3/async/task-result?task_id=${task_id}`, {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    if (!pollRes.ok) continue;
+    const data = await pollRes.json();
+    const status = data.task?.status;
+    if (status === 'TASK_STATUS_SUCCEED') {
+      const urls = (data.images || []).map(img => img.image_url).filter(Boolean);
+      if (!urls.length) throw new Error('NovitaAI img2img：未返回圖片 URL');
+      console.log('[NovitaAI img2img] 完成:', urls[0].substring(0, 60));
+      return urls[0];
+    }
+    if (status === 'TASK_STATUS_FAILED') {
+      const reason = data.task?.reason || data.task?.err_detail || '未知錯誤';
+      throw new Error(`NovitaAI img2img 生成失敗: ${reason}`);
+    }
+  }
+  throw new Error('NovitaAI img2img 生成超時，點數已退還');
+}
+
 // NovitaAI 文字生成圖片（非同步輪詢，後端等待結果）
 async function novitaTextToImage(modelName, prompt, negativePrompt, width, height, count = 1) {
   const apiKey = process.env.NOVITA_API_KEY;
@@ -155,6 +222,174 @@ async function translateChunk(chunk) {
   return chunk; // 翻譯失敗就保留原文
 }
 
+// ── 人名偵測 + 外觀描述注入（翻譯後直接注入，繞過翻譯損失）──────
+// ── 公眾人物外觀資料庫（英文 SD 最佳化關鍵詞，直接注入翻譯後的提詞）
+const CELEBRITY_DB_EN = {
+  // ── 台灣政治人物 ─────────────────────────────────────────────
+  '陳時中':  'Chen Shih-chung, elderly Taiwanese male, 74 years old, round chubby face with full cheeks and age wrinkles, short salt-and-pepper dark grey hair thinning on top, small warm friendly eyes, thin dark rectangular-framed glasses, stocky short overweight build, dark navy blue business suit, gold yellow necktie, East Asian complexion, warm approachable smile',
+  '蔡英文':  'Tsai Ing-wen, Taiwanese female politician, 68 years old, short black bob haircut, petite slim figure, dark formal business suit, dignified composed expression, East Asian complexion',
+  '賴清德':  'Lai Ching-te, Taiwanese male politician, 65 years old, short black hair, slender trim build, dark formal business suit with tie, confident expression, East Asian complexion',
+  '柯文哲':  'Ko Wen-je, Taiwanese male, 56 years old, extremely short buzz-cut black hair, slim tall lanky build, polo shirt or casual suit jacket, sharp intense piercing gaze, prominent cheekbones, East Asian complexion',
+  '韓國瑜':  'Han Kuo-yu, Taiwanese male politician, 67 years old, receding hairline bald forehead, overweight heavyset chubby build, round fleshy face, dark suit, East Asian complexion',
+  '侯友宜':  'Hou Yu-ih, Taiwanese male politician, 67 years old, short grey-black hair, stocky muscular build, dark formal suit, serious stern expression, East Asian complexion',
+  '朱立倫':  'Chu Li-luan, Taiwanese male politician, 63 years old, short black hair, medium build, dark formal business suit, friendly refined expression, East Asian complexion',
+  '江啟臣':  'Chiang Chi-chen, Taiwanese male politician, 54 years old, short black hair, medium slim build, dark business suit, youthful handsome face, East Asian complexion',
+  '鄭文燦':  'Cheng Wen-tsan, Taiwanese male politician, 57 years old, short black hair, slightly chubby round face, warm friendly smile, dark business suit, East Asian complexion',
+  '陳其邁':  'Chen Chi-mai, Taiwanese male politician, 58 years old, short black hair, medium athletic build, dark suit, sharp capable expression, East Asian complexion',
+  '盧秀燕':  'Lu Hsiu-yen, Taiwanese female politician, 62 years old, short black hair, medium build, formal pantsuit, round friendly face, East Asian complexion',
+  '黃偉哲':  'Huang Wei-che, Taiwanese male politician, 60 years old, black hair, wears glasses, scholarly intellectual appearance, business suit, East Asian complexion',
+  '鄭麗君':  'Cheng Li-chun, Taiwanese female politician, 52 years old, long black hair, elegant graceful figure, formal suit, artistic intellectual expression, East Asian complexion',
+  '王世堅':  'Wang Shih-chien, Taiwanese male politician, 63 years old, salt-and-pepper short hair, overweight heavyset build, dark suit, East Asian complexion',
+  '黃國昌':  'Huang Kuo-chang, Taiwanese male politician, 54 years old, short black hair, slim build, wears glasses, suit or casual dress, serious intellectual expression, East Asian complexion',
+  '傅崐萁':  'Fu Kun-chi, Taiwanese male politician, 62 years old, short black hair, medium build, dark suit, East Asian complexion',
+  '徐巧芯':  'Hsu Chiao-hsin, Taiwanese female politician, 39 years old, long black hair, youthful appearance, formal suit, East Asian complexion',
+  '吳欣盈':  'Wu Hsin-ying, Taiwanese female politician, 41 years old, long black hair, tall slim figure, fashionable clothing, East Asian complexion',
+  '林義雄':  'Lin Yi-hsiung, elderly Taiwanese male, 83 years old, white silver hair, kind benevolent face, simple modest clothing, East Asian complexion',
+  // ── 台灣媒體人 / YouTuber ────────────────────────────────────
+  '四叉貓':  'Sizhimao Liu Yu-xi, Taiwanese male internet commentator, 46 years old, short black hair, slim lean build, casual streetwear or casual shirt, friendly approachable expression, East Asian complexion',
+  '蔡阿嘎':  'Tsai A-ga, Taiwanese male YouTuber, 38 years old, short black hair, energetic cheerful expression, colorful casual clothing, youthful appearance, East Asian complexion',
+  '館長':    'Guanzhang Chen Chih-han, Taiwanese male fitness influencer, 45 years old, very muscular extremely buff physique, short hair, tank top or athletic wear, tall imposing figure, East Asian complexion',
+  '陳之漢':  'Chen Chih-han Guanzhang, Taiwanese male fitness influencer, 45 years old, very muscular extremely buff physique, short hair, tank top or athletic wear, tall imposing figure, East Asian complexion',
+  '呱吉':    'Gua Ji, Taiwanese male YouTuber, 46 years old, short black hair, wears glasses, humorous funny expression, casual clothing, East Asian complexion',
+  '博恩':    'Born, Taiwanese male stand-up comedian, 34 years old, short black hair, wears glasses, witty expression, smart casual clothing, East Asian complexion',
+  '理科太太': 'Likei Mrs, Taiwanese female YouTuber, 35 years old, straight long black hair, intellectual clean appearance, minimalist casual wear, East Asian complexion',
+  '志祺七七': 'Shih Chi, Taiwanese male YouTuber, 34 years old, short black hair, friendly warm smile, casual clothing, East Asian complexion',
+  '鄭弘儀':  'Zheng Hongyi, Taiwanese male TV host, 65 years old, white grey hair, medium build, business suit, experienced broadcaster appearance, East Asian complexion',
+  '路怡珍':  'Lu Yi-zhen, Taiwanese female TV anchor, 43 years old, long black hair, professional elegant appearance, formal suit, East Asian complexion',
+  '盧秀芳':  'Lu Hsiu-fang, Taiwanese female news anchor, 59 years old, short black hair, professional elegant appearance, formal suit, East Asian complexion',
+  '小玉':    'Xiao Yu, Taiwanese male YouTuber, 30 years old, short black hair, youthful face, casual clothing, East Asian complexion',
+  // ── 台灣歌手 / 演員 ──────────────────────────────────────────
+  '周杰倫':  'Jay Chou, Taiwanese male singer, 46 years old, short stylish black hair, handsome face, fashionable trendy clothing, charismatic star quality, East Asian complexion',
+  '蔡依林':  'Jolin Tsai, Taiwanese female singer, 48 years old, varied hairstyles, tall slim toned figure, glamorous fashionable outfits, East Asian complexion',
+  '張惠妹':  'A-Mei Chang, Taiwanese Aboriginal female singer, 52 years old, full voluptuous figure, energetic vibrant expression, bold colorful fashion, East Asian complexion',
+  '林俊傑':  'JJ Lin, Singaporean-Chinese male singer, 43 years old, short black hair, handsome boyish face, casual or stage wear, charming smile, East Asian complexion',
+  '林志玲':  'Lin Chi-ling, Taiwanese female model actress, 49 years old, long black hair, 165cm tall elegant slim figure, graceful sophisticated appearance, East Asian complexion',
+  '楊丞琳':  'Rainie Yang, Taiwanese female singer actress, 41 years old, long black hair, cute sweet face, fashionable trendy clothing, East Asian complexion',
+  '陳柏霖':  'Chen Bo-lin, Taiwanese male actor, 43 years old, short black hair, handsome chiseled face, slim build, East Asian complexion',
+  '盧廣仲':  'Crowd Lu, Taiwanese male singer, 37 years old, curly tousled hair, boyish charming face, casual musical style clothing, East Asian complexion',
+  '謝金燕':  'Jess Shieh, Taiwanese female singer, 52 years old, bold provocative fashion, energetic sexy stage presence, colorful outfits, East Asian complexion',
+  '五月天阿信': 'Ashin Mayday, Taiwanese male rock singer, 47 years old, black hair, rock music style clothing, energetic expressive face, East Asian complexion',
+  '柯震東':  'Ko Chen-tung, Taiwanese male actor, 33 years old, short black hair, handsome youthful face, slim build, East Asian complexion',
+  '盧廣仲':  'Crowd Lu, Taiwanese male singer-songwriter, 37 years old, curly black hair, boyish charming face, casual music style clothing, East Asian complexion',
+  '周湯豪':  'Nick Chou, Taiwanese male singer actor, 34 years old, short black hair, handsome sunny appearance, casual clothing, East Asian complexion',
+  // ── 香港 / 中國 ────────────────────────────────────────────
+  '習近平':  'Xi Jinping, Chinese male politician, 71 years old, short black hair with grey, slightly overweight medium build, dark Mao suit or business suit, authoritative stern expression, East Asian complexion',
+  '李克強':  'Li Keqiang, Chinese male politician, 70 years old, short black hair, medium build, dark business suit, composed scholarly expression, East Asian complexion',
+  '李嘉誠':  'Li Ka-shing, elderly Hong Kong male billionaire, 96 years old, white hair, short slim elderly build, dark business suit, wise aged face, East Asian complexion',
+  '劉德華':  'Andy Lau, Hong Kong male actor singer, 63 years old, short black hair with slight grey, handsome mature face, slim well-maintained build, East Asian complexion',
+  '成龍':    'Jackie Chan, Hong Kong male actor, 70 years old, short salt-and-pepper hair, muscular stocky build, friendly charismatic smile, East Asian complexion',
+  '梁朝偉':  'Tony Leung Chiu-wai, Hong Kong male actor, 62 years old, short black hair, deep brooding eyes, slim elegant build, sophisticated mature appearance, East Asian complexion',
+  '張學友':  'Jacky Cheung, Hong Kong male singer, 63 years old, short black hair, medium build, warm charismatic expression, East Asian complexion',
+  '王菲':    'Faye Wong, Chinese female singer, 55 years old, changeable hairstyles, ethereal cool beauty, avant-garde fashion, slim figure, East Asian complexion',
+  '范冰冰':  'Fan Bingbing, Chinese female actress, 43 years old, long black hair, strikingly beautiful face, glamorous high-fashion outfits, slim figure, East Asian complexion',
+  '趙麗穎':  'Zhao Liying, Chinese female actress, 37 years old, long black hair, sweet cute face, petite slim figure, East Asian complexion',
+  // ── 國際知名 ────────────────────────────────────────────────
+  '大谷翔平': 'Shohei Ohtani, Japanese male baseball player, 30 years old, 193cm very tall muscular athletic build, handsome East Asian face, baseball uniform or casual sportswear',
+  '伊隆馬斯克': 'Elon Musk, American male tech entrepreneur, 53 years old, 188cm tall, short dark brown hair, medium build, casual or business casual clothing, confident expression, Western complexion',
+  '馬斯克':   'Elon Musk, American male tech entrepreneur, 53 years old, 188cm tall, short dark brown hair, medium build, casual or business casual clothing, confident expression, Western complexion',
+};
+
+// 常見非人名詞彙（避免誤判）
+const PERSON_STOP_WORDS = new Set([
+  '生成','創作','描繪','繪製','畫出','製作','請幫','幫我','生圖',
+  '圖片','照片','影像','圖像','場景','畫面','圖畫','插圖',
+  '愛情','婚禮','約會','擁抱','接吻','戀愛','互動','親吻',
+  '背景','日本','台灣','中國','美國','韓國','英國','法國',
+  '台北','高雄','台中','新北','桃園','東京','首爾','北京',
+  '男性','女性','男人','女人','男孩','女孩','小孩','老人',
+  '帥氣','漂亮','可愛','美麗','英俊','性感','清純',
+  '穿著','服裝','衣服','套裝','禮服','制服','裙子',
+  '白色','黑色','紅色','藍色','綠色','黃色','粉色',
+  '室內','室外','公園','海邊','山上','城市','街道',
+  '一個','一位','一名','一對','兩個','兩位','多個',
+  '正在','互相','彼此','共同','一起','同時',
+  '動畫','漫畫','風格','質感','高畫質','寫實','唯美',
+  '特寫','全身','半身','側臉','正面','背面',
+]);
+
+// 常見動詞前綴（避免「生成X」被誤判為5字整體）
+const VERB_PREFIXES = ['生成','創作','描繪','繪製','畫出','製作','請幫','幫我','生圖','請畫','畫一','幫我畫'];
+
+// 從 extract 中估算年齡
+function extractAgeHint(extract) {
+  const m = extract.match(/[（(](\d{4})年/);
+  if (!m) return '';
+  const age = new Date().getFullYear() - parseInt(m[1]);
+  if (age < 10 || age > 120) return '';
+  return `，約${age}歲`;
+}
+
+// 從 extract 中偵測性別（台灣中文 Wikipedia 常見寫法）
+function detectGenderHint(extract) {
+  if (/\b他\b|男性|男演員|男歌手|男藝人|男政治|男主持/.test(extract)) return '，男性';
+  if (/\b她\b|女性|女演員|女歌手|女藝人|女政治|女主持/.test(extract)) return '，女性';
+  return '';
+}
+
+// 查詢 Wikipedia，對資料庫之外的人名建構英文外觀描述
+async function lookupPersonWikiEN(name) {
+  try {
+    const url = `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.type === 'disambiguation' || !data.extract) return null;
+    const combined = (data.description || '') + data.extract.slice(0, 200);
+    const isPerson = /人物|演員|歌手|政治|運動員|YouTuber|youtuber|主持人|作家|導演|模特兒|明星|藝人|醫師|教授|選手|球員|律師|記者|創作者|網紅|網路紅人|評論|時事|主播|直播|媒體/.test(combined);
+    if (!isPerson) return null;
+    const firstSentence = data.extract.split(/[。！？\n]/)[0] || '';
+    const ageHint = extractAgeHint(firstSentence);
+    const age = ageHint ? ageHint.replace('，約', '').replace('歲', ' years old') : '';
+    const genderHint = detectGenderHint(data.extract.slice(0, 300));
+    const gender = genderHint.includes('男') ? 'male' : genderHint.includes('女') ? 'female' : '';
+    const desc = (data.description || '').replace(/[\n\r]/g, ' ').trim();
+    const parts = [name, gender, age ? age : '', desc, 'East Asian complexion'].filter(Boolean);
+    const result = parts.join(', ');
+    console.log(`[Wikipedia EN] "${name}" → ${result.slice(0, 80)}`);
+    return result;
+  } catch (e) { return null; }
+}
+
+// 偵測提詞中的人名，收集英文外觀描述（翻譯後注入，不修改原始中文提詞）
+async function collectPersonDescriptionsEN(chineseText) {
+  const descriptions = [];
+  const usedNames = [];
+
+  // ── 第一步：直接比對 CELEBRITY_DB_EN（最可靠）─────────────
+  const sortedNames = Object.keys(CELEBRITY_DB_EN).sort((a, b) => b.length - a.length);
+  for (const name of sortedNames) {
+    if (chineseText.includes(name) && !usedNames.some(n => name.includes(n) || n.includes(name))) {
+      descriptions.push(CELEBRITY_DB_EN[name]);
+      usedNames.push(name);
+      console.log(`[人物資料庫] "${name}" 已收集英文描述`);
+    }
+  }
+
+  // ── 第二步：分割法找資料庫之外的候選人名，Wikipedia 查詢 ────
+  let cleaned = chineseText;
+  for (const v of VERB_PREFIXES) cleaned = cleaned.replace(new RegExp(v, 'g'), ' ');
+  const funcPattern = /[的了是在有與和之及也都你我他她它們這那哪什麼怎麼為什麼、，。！？「」【】《》\s]+/g;
+  const parts = cleaned.split(funcPattern).filter(Boolean);
+  const candidates = [...new Set(parts)].filter(w =>
+    w.length >= 2 && w.length <= 4 &&
+    /^[\u4e00-\u9fff]+$/.test(w) &&
+    !PERSON_STOP_WORDS.has(w) &&
+    !CELEBRITY_DB_EN[w] &&
+    !usedNames.includes(w)
+  );
+  if (candidates.length > 0) {
+    const lookupResults = await Promise.all(
+      candidates.slice(0, 3).map(async name => ({ name, desc: await lookupPersonWikiEN(name) }))
+    );
+    for (const { name, desc } of lookupResults.filter(r => r.desc)) {
+      descriptions.push(desc);
+      console.log(`[Wikipedia] "${name}" 已收集描述`);
+    }
+  }
+
+  return descriptions;
+}
+
 // 智慧翻譯：只翻譯中文片段，SD 語法 / 英文 Tags 保留不動
 async function translateToEnglish(text) {
   const cleanText = text.replace(/\s*--\s*style:.*$/i, '').trim();
@@ -225,11 +460,22 @@ function enhancePrompt(prompt, style) {
 // 自動翻譯 + 強化提示詞（主流程）
 async function preparePrompt(prompt, style) {
   if (!prompt) return prompt;
-  // 提取純文字（去除 "-- style:..." 標記）
   let p = prompt.replace(/\s*--\s*style:.*$/i, '').trim();
+
+  let personDescriptions = [];
   if (hasChinese(p)) {
+    // ① 翻譯前：收集英文人物外觀描述（不修改中文提詞）
+    personDescriptions = await collectPersonDescriptionsEN(p);
+    // ② 翻譯提詞
     p = await translateToEnglish(p);
   }
+
+  // ③ 翻譯後：把英文人物描述前置注入（繞過翻譯，確保關鍵詞精準）
+  if (personDescriptions.length > 0) {
+    p = personDescriptions.join(', ') + ', ' + p;
+    console.log('[人物描述已注入翻譯後提詞]', p.slice(0, 120));
+  }
+
   return enhancePrompt(p, style);
 }
 
@@ -359,14 +605,18 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
 
 // 圖片轉圖片
 router.post('/image-to-image', authMiddleware, checkCredits('image-to-image'), upload.single('image'), async (req, res) => {
-  const { prompt, strength = 0.7 } = req.body;
+  const { prompt, strength = 0.7, model = 'novita-majicmix', width = 768, height = 768 } = req.body;
   if (!prompt) return res.status(400).json({ error: '請輸入提示詞' });
   if (!req.file) return res.status(400).json({ error: '請上傳圖片' });
+
+  // 選擇 NovitaAI 模型名稱：若前端傳來的 model 是 novita 系列就用它，否則預設 majicmix
+  const novitaModelKey = (model in NOVITA_MODELS) ? model : 'novita-majicmix';
+  const novitaModelName = NOVITA_MODELS[novitaModelKey];
 
   const id = uuidv4();
   await db.insertOne('generations', {
     id, user_id: req.user.id, type: 'image-to-image',
-    prompt, model: 'sdxl', image_url: null, status: 'processing',
+    prompt, model: novitaModelKey, image_url: null, status: 'processing',
     is_public: false,
     credit_cost: req.creditCost, created_at: new Date().toISOString()
   });
@@ -376,18 +626,16 @@ router.post('/image-to-image', authMiddleware, checkCredits('image-to-image'), u
 
   try {
     const finalPrompt = await preparePrompt(prompt);
-    const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
     const imageData = fs.readFileSync(req.file.path);
     const base64Image = `data:${req.file.mimetype};base64,${imageData.toString('base64')}`;
 
-    const output = await replicate.run(
-      'stability-ai/sdxl:39ed52f2319f9c07e2c6ce3367fb4cb7203f4cd64a25d6927f7fa2d07fa7fba5',
-      { input: { prompt: finalPrompt, image: base64Image, strength: parseFloat(strength) } }
+    const imageUrl = await novitaImageToImage(
+      novitaModelName, finalPrompt, base64Image,
+      parseFloat(strength), parseInt(width, 10) || 768, parseInt(height, 10) || 768
     );
 
     fs.unlinkSync(req.file.path);
-    const imageUrl = Array.isArray(output) ? output[0] : String(output);
-    await db.updateOne('generations', { id }, { image_url: imageUrl, status: 'completed' });
+    await db.updateOne('generations', { id }, { image_url: imageUrl, status: 'completed', prompt_en: finalPrompt });
     const updatedUser = await db.findOne('users', { id: req.user.id });
     res.json({ id, image_url: imageUrl, status: 'completed', credits: updatedUser.credits });
   } catch (err) {
@@ -395,7 +643,10 @@ router.post('/image-to-image', authMiddleware, checkCredits('image-to-image'), u
     const u = await db.findOne('users', { id: req.user.id });
     await db.updateOne('users', { id: req.user.id }, { credits: u.credits + req.creditCost });
     await db.updateOne('generations', { id }, { status: 'failed' });
-    res.status(500).json({ error: '圖片生成失敗: ' + err.message });
+    console.error('[img2img] 失敗:', err.message);
+    let userMsg = '圖片生成失敗：' + err.message;
+    if (err.message.includes('NOVITA_API_KEY')) userMsg = 'NovitaAI API Key 未設定，請至 Railway 環境變數新增 NOVITA_API_KEY';
+    res.status(500).json({ error: userMsg });
   }
 });
 

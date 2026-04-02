@@ -358,6 +358,7 @@ export default function Generate() {
         const fd = new FormData()
         fd.append('image', inputImage); fd.append('prompt', styledPrompt)
         fd.append('strength', strength); fd.append('style', style); fd.append('quality', quality)
+        fd.append('model', model); fd.append('width', size.w); fd.append('height', size.h)
         const res = await axios.post('/generate/image-to-image', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
         setResult(res.data.image_url); setResultType('image')
         if (res.data.credits !== undefined) updateCredits(res.data.credits)
