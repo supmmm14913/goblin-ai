@@ -50,16 +50,16 @@ export default function ForgotPassword() {
                 連結 1 小時內有效。
               </p>
 
-              {/* 開發模式顯示連結 */}
+              {/* 開發模式顯示連結（未設定寄信服務時顯示） */}
               {devUrl && (
                 <div className="bg-[#c8ff3e]/10 border border-[#c8ff3e]/20 rounded-xl p-3 mb-4 text-left">
-                  <p className="text-neon text-xs font-bold mb-1">⚡ 開發模式（未設定 SMTP）</p>
-                  <p className="text-white/40 text-xs mb-2">重設連結：</p>
-                  <Link to={devUrl.replace(window.location.origin, '')}
+                  <p className="text-neon text-xs font-bold mb-1">⚡ 點擊下方連結重設密碼</p>
+                  <p className="text-white/40 text-xs mb-2">（寄信服務未啟用，請直接點擊連結）</p>
+                  <a href={devUrl}
                     className="text-neon text-xs break-all hover:underline"
                     style={{color:'#c8ff3e'}}>
                     點此前往重設頁面 →
-                  </Link>
+                  </a>
                 </div>
               )}
 

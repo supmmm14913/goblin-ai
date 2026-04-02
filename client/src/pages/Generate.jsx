@@ -28,14 +28,17 @@ function GridImageCard({ url, index, isPublished, canReward, onPublish, prompt, 
         #{index + 1}
       </span>
 
-      {/* 放大圖示（常駐右上）*/}
-      <span style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.65)', color: '#fff', fontSize: 12, width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none', opacity: hovered ? 1 : 0.5, transition: 'opacity 0.2s' }}>
-        🔍
-      </span>
+      {/* 放大按鈕（常駐右上，隨時可點）*/}
+      <button
+        onClick={e => { e.stopPropagation(); openLightbox(url, { prompt, model: modelId }) }}
+        title="放大"
+        style={{ position: 'absolute', top: 6, right: 6, background: 'rgba(0,0,0,0.72)', color: '#fff', fontSize: 11, fontWeight: 700, border: '1px solid rgba(255,255,255,0.18)', borderRadius: 8, padding: '3px 7px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, opacity: hovered ? 1 : 0.75, transition: 'opacity 0.2s', zIndex: 2 }}>
+        🔍 放大
+      </button>
 
       {/* 已公開標籤 */}
       {isPublished && (
-        <span style={{ position: 'absolute', top: 6, right: 34, background: '#c8ff3e', color: '#000', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, pointerEvents: 'none' }}>
+        <span style={{ position: 'absolute', top: 6, left: 34, background: '#c8ff3e', color: '#000', fontSize: 9, fontWeight: 700, padding: '2px 6px', borderRadius: 4, pointerEvents: 'none' }}>
           已公開
         </span>
       )}

@@ -21,8 +21,9 @@ function buildResetHtml(username, resetUrl) {
 
 // ─── 寄送重設密碼信
 // 優先順序：Resend API → Gmail SMTP → 開發模式（顯示連結）
-async function sendResetEmail(email, username, token) {
-  const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:5173'}/reset-password?token=${token}`;
+async function sendResetEmail(email, username, token, clientUrl) {
+  const base = clientUrl || process.env.CLIENT_URL || 'http://localhost:5173'
+  const resetUrl = `${base.replace(/\/$/, '')}/reset-password?token=${token}`;
   const html = buildResetHtml(username, resetUrl);
 
   // ── 方案 1：Resend API（最簡單，免費每月 3000 封）
@@ -170,8 +171,11 @@ router.post('/forgot-password', async (req, res) => {
     reset_expires: expires
   });
 
+  // 從 request 標頭取得正確的前端網址（避免寫死 localhost）
+  const clientUrl = req.get('origin') || req.get('referer')?.replace(/\/[^/]*$/, '') || process.env.CLIENT_URL
+
   try {
-    const result = await sendResetEmail(email, user.username, token);
+    const result = await sendResetEmail(email, user.username, token, clientUrl);
     if (result.sent) {
       res.json({ success: true, message: '重設連結已寄送到你的信箱！' });
     } else {
