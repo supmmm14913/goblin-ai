@@ -327,46 +327,81 @@ function detectGenderHint(extract) {
   return '';
 }
 
-// 查詢 Wikipedia，對資料庫之外的人名建構英文外觀描述
-async function lookupPersonWikiEN(name) {
+// ── 網路搜尋人物（優先 Wikipedia 圖片 + DuckDuckGo 文字）────────────────
+const PERSON_KEYWORDS_RE = /人物|演員|歌手|政治|運動員|YouTuber|youtuber|主持人|作家|導演|模特兒|明星|藝人|醫師|教授|選手|球員|律師|記者|創作者|網紅|網路紅人|評論|時事|主播|直播|媒體/;
+
+async function searchPersonOnWeb(name) {
+  let imageUrl = null;
+  let textDesc = null;
+
+  // Step 1：Wikipedia zh — 取摘要 + 人物縮圖
   try {
-    const url = `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.type === 'disambiguation' || !data.extract) return null;
-    const combined = (data.description || '') + data.extract.slice(0, 200);
-    const isPerson = /人物|演員|歌手|政治|運動員|YouTuber|youtuber|主持人|作家|導演|模特兒|明星|藝人|醫師|教授|選手|球員|律師|記者|創作者|網紅|網路紅人|評論|時事|主播|直播|媒體/.test(combined);
-    if (!isPerson) return null;
-    const firstSentence = data.extract.split(/[。！？\n]/)[0] || '';
-    const ageHint = extractAgeHint(firstSentence);
-    const age = ageHint ? ageHint.replace('，約', '').replace('歲', ' years old') : '';
-    const genderHint = detectGenderHint(data.extract.slice(0, 300));
-    const gender = genderHint.includes('男') ? 'male' : genderHint.includes('女') ? 'female' : '';
-    const desc = (data.description || '').replace(/[\n\r]/g, ' ').trim();
-    const parts = [name, gender, age ? age : '', desc, 'East Asian complexion'].filter(Boolean);
-    const result = parts.join(', ');
-    console.log(`[Wikipedia EN] "${name}" → ${result.slice(0, 80)}`);
-    return result;
-  } catch (e) { return null; }
+    const wikiUrl = `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
+    const wikiRes = await fetch(wikiUrl, { signal: AbortSignal.timeout(5000) });
+    if (wikiRes.ok) {
+      const wd = await wikiRes.json();
+      if (wd.type !== 'disambiguation' && wd.extract) {
+        const combined = (wd.description || '') + wd.extract.slice(0, 300);
+        if (PERSON_KEYWORDS_RE.test(combined)) {
+          // 取較大尺寸縮圖（供 img2img 使用）
+          if (wd.thumbnail?.source) {
+            imageUrl = wd.thumbnail.source.replace(/\/\d+px-/, '/400px-');
+          }
+          const bm    = wd.extract.match(/[（(](\d{4})年/);
+          const age   = bm ? new Date().getFullYear() - parseInt(bm[1]) : null;
+          const isM   = /\b他\b|男性|男演員|男歌手|男政治/.test(wd.extract.slice(0, 300));
+          const isF   = /\b她\b|女性|女演員|女歌手|女政治/.test(wd.extract.slice(0, 300));
+          const gender = isM ? 'male' : isF ? 'female' : '';
+          const desc   = (wd.description || '').replace(/[\n\r]/g, ' ').trim();
+          textDesc = ['portrait photo of ' + name, gender, age ? `${age} years old` : '', desc, 'East Asian complexion', 'photorealistic portrait'].filter(Boolean).join(', ');
+          console.log(`[Web Search] Wikipedia "${name}" 圖:${imageUrl ? '✅' : '❌'} 描:✅`);
+        }
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  // Step 2：DuckDuckGo Instant Answer（無需 API key，備援）
+  if (!textDesc || !imageUrl) {
+    try {
+      const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(name)}&format=json&no_html=1&skip_disambig=1`;
+      const ddgRes = await fetch(ddgUrl, { signal: AbortSignal.timeout(5000) });
+      if (ddgRes.ok) {
+        const ddg = await ddgRes.json();
+        if (!imageUrl && ddg.Image) imageUrl = `https://duckduckgo.com${ddg.Image}`;
+        if (!textDesc && ddg.AbstractText) {
+          textDesc = `portrait photo of ${name}, ${ddg.AbstractText.slice(0, 150)}, East Asian complexion, photorealistic portrait`;
+          console.log(`[Web Search] DuckDuckGo "${name}" 描:✅`);
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  return { imageUrl, textDesc };
 }
 
-// 偵測提詞中的人名，收集英文外觀描述（翻譯後注入，不修改原始中文提詞）
+// 偵測提詞中的人名，收集英文外觀描述 + 網路參考圖片（翻譯後注入）
 async function collectPersonDescriptionsEN(chineseText) {
-  const descriptions = [];
-  const usedNames = [];
+  const descriptions   = [];
+  const referenceImages = [];
+  const usedNames      = [];
 
-  // ── 第一步：直接比對 CELEBRITY_DB_EN（最可靠）─────────────
+  // ── 第一步：直接比對 CELEBRITY_DB_EN，並同時嘗試取得網路參考圖片 ──
   const sortedNames = Object.keys(CELEBRITY_DB_EN).sort((a, b) => b.length - a.length);
   for (const name of sortedNames) {
     if (chineseText.includes(name) && !usedNames.some(n => name.includes(n) || n.includes(name))) {
       descriptions.push(CELEBRITY_DB_EN[name]);
       usedNames.push(name);
-      console.log(`[人物資料庫] "${name}" 已收集英文描述`);
+      console.log(`[人物資料庫] "${name}" 已收集英文描述，嘗試抓取參考圖片…`);
+      // 從網路取得此人物的真實照片（供後續 img2img 使用）
+      const { imageUrl } = await searchPersonOnWeb(name);
+      if (imageUrl) {
+        referenceImages.push(imageUrl);
+        console.log(`[Web Search] "${name}" 參考圖片:`, imageUrl.slice(0, 80));
+      }
     }
   }
 
-  // ── 第二步：分割法找資料庫之外的候選人名，Wikipedia 查詢 ────
+  // ── 第二步：分割法找資料庫之外的候選人名，網路搜尋 ────────────────
   let cleaned = chineseText;
   for (const v of VERB_PREFIXES) cleaned = cleaned.replace(new RegExp(v, 'g'), ' ');
   const funcPattern = /[的了是在有與和之及也都你我他她它們這那哪什麼怎麼為什麼、，。！？「」【】《》\s]+/g;
@@ -379,16 +414,22 @@ async function collectPersonDescriptionsEN(chineseText) {
     !usedNames.includes(w)
   );
   if (candidates.length > 0) {
-    const lookupResults = await Promise.all(
-      candidates.slice(0, 3).map(async name => ({ name, desc: await lookupPersonWikiEN(name) }))
+    const searchResults = await Promise.all(
+      candidates.slice(0, 3).map(async n => ({ n, result: await searchPersonOnWeb(n) }))
     );
-    for (const { name, desc } of lookupResults.filter(r => r.desc)) {
-      descriptions.push(desc);
-      console.log(`[Wikipedia] "${name}" 已收集描述`);
+    for (const { n, result } of searchResults) {
+      if (result.textDesc) {
+        descriptions.push(result.textDesc);
+        console.log(`[Web Search] "${n}" 已收集網路描述`);
+      }
+      if (result.imageUrl) {
+        referenceImages.push(result.imageUrl);
+        console.log(`[Web Search] "${n}" 已取得參考圖片`);
+      }
     }
   }
 
-  return descriptions;
+  return { descriptions, referenceImages };
 }
 
 // 智慧翻譯：只翻譯中文片段，SD 語法 / 英文 Tags 保留不動
@@ -458,26 +499,40 @@ function enhancePrompt(prompt, style) {
   return combined;
 }
 
-// 自動翻譯 + 強化提示詞（主流程）
+// 自動翻譯 + 強化提示詞（主流程，回傳字串，供影片/img2img 等路由使用）
 async function preparePrompt(prompt, style) {
   if (!prompt) return prompt;
   let p = prompt.replace(/\s*--\s*style:.*$/i, '').trim();
-
   let personDescriptions = [];
   if (hasChinese(p)) {
-    // ① 翻譯前：收集英文人物外觀描述（不修改中文提詞）
-    personDescriptions = await collectPersonDescriptionsEN(p);
-    // ② 翻譯提詞
+    const collected = await collectPersonDescriptionsEN(p);
+    personDescriptions = collected.descriptions || [];
     p = await translateToEnglish(p);
   }
-
-  // ③ 翻譯後：把英文人物描述前置注入（繞過翻譯，確保關鍵詞精準）
   if (personDescriptions.length > 0) {
     p = personDescriptions.join(', ') + ', ' + p;
     console.log('[人物描述已注入翻譯後提詞]', p.slice(0, 120));
   }
-
   return enhancePrompt(p, style);
+}
+
+// 自動翻譯 + 強化提示詞（完整版，同時回傳網路參考圖片 URL，供文生圖自動 img2img）
+async function preparePromptFull(prompt, style) {
+  if (!prompt) return { text: prompt, referenceImages: [] };
+  let p = prompt.replace(/\s*--\s*style:.*$/i, '').trim();
+  let personDescriptions = [];
+  let referenceImages    = [];
+  if (hasChinese(p)) {
+    const collected = await collectPersonDescriptionsEN(p);
+    personDescriptions = collected.descriptions  || [];
+    referenceImages    = collected.referenceImages || [];
+    p = await translateToEnglish(p);
+  }
+  if (personDescriptions.length > 0) {
+    p = personDescriptions.join(', ') + ', ' + p;
+    console.log('[人物描述已注入翻譯後提詞]', p.slice(0, 120));
+  }
+  return { text: enhancePrompt(p, style), referenceImages };
 }
 
 // 檢查並扣除點數的 middleware（支援批量生成）
@@ -533,13 +588,36 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
   await db.updateOne('users', { id: req.user.id }, { credits: user.credits - req.creditCost });
 
   try {
-    const finalPrompt = await preparePrompt(prompt, style);
+    // 使用完整版準備提詞（同時獲取人物網路參考圖片）
+    const { text: finalPrompt, referenceImages } = await preparePromptFull(prompt, style);
     const styleNeg = STYLE_NEGATIVE[style] || '';
     const fullNeg = [negative_prompt, styleNeg].filter(Boolean).join(', ');
 
     // ── NovitaAI 分支 ────────────────────────────────────────
     if (model in NOVITA_MODELS) {
-      const imageUrls = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount);
+      let imageUrls;
+
+      // ── 若找到人物真實照片，自動改用 img2img（大幅提升相似度）────
+      if (referenceImages.length > 0) {
+        console.log(`[自動 img2img] 偵測到人物參考圖片，嘗試使用 img2img 提升相似度…`);
+        try {
+          const refRes = await fetch(referenceImages[0], { signal: AbortSignal.timeout(8000) });
+          if (!refRes.ok) throw new Error(`圖片下載失敗 ${refRes.status}`);
+          const refBuf  = Buffer.from(await refRes.arrayBuffer());
+          const mime    = refRes.headers.get('content-type') || 'image/jpeg';
+          const base64Ref = `data:${mime};base64,${refBuf.toString('base64')}`;
+          // strength=0.65：保留真人臉部特徵，同時允許風格化
+          const singleUrl = await novitaImageToImage(NOVITA_MODELS[model], finalPrompt, base64Ref, 0.65, Math.min(width, 768), Math.min(height, 768));
+          imageUrls = [singleUrl];
+          console.log(`[自動 img2img] ✅ 成功使用真人照片生成`);
+        } catch (imgErr) {
+          console.warn(`[自動 img2img] ⚠️ 失敗，回退 txt2img:`, imgErr.message);
+          imageUrls = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount);
+        }
+      } else {
+        imageUrls = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount);
+      }
+
       // 儲存第一張到原始 id，額外張各建一筆記錄
       await db.updateOne('generations', { id }, { image_url: imageUrls[0], status: 'completed', prompt_en: finalPrompt });
       for (let i = 1; i < imageUrls.length; i++) {
