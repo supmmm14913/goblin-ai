@@ -69,6 +69,63 @@ const NOVITA_MODELS = {
   'novita-sdxl':               'sd_xl_base_1.0.safetensors',
 };
 
+// ── 永久圖片存儲（解決 NovitaAI S3 URL 48 小時過期問題）──────────────────
+// 使用 Cloudinary 免費方案（25GB/月）
+// 需在 Railway 環境變數設定：CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET
+async function uploadToPermanentStorage(imageUrl) {
+  const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const apiKey    = process.env.CLOUDINARY_API_KEY;
+  const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+  // 若未設定 Cloudinary，備援使用 imgbb（只需 IMGBB_API_KEY）
+  if (!cloudName || !apiKey || !apiSecret) {
+    const imgbbKey = process.env.IMGBB_API_KEY;
+    if (!imgbbKey) return imageUrl; // 都沒設定，直接回傳原始 URL
+    try {
+      const form = new URLSearchParams({ key: imgbbKey, image: imageUrl });
+      const res  = await fetch('https://api.imgbb.com/1/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString(),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!res.ok) throw new Error(`imgbb ${res.status}`);
+      const data = await res.json();
+      console.log(`[imgbb] ✅ 永久存儲:`, data.data.url.slice(0, 80));
+      return data.data.url;
+    } catch (e) {
+      console.warn(`[imgbb] ⚠️ 上傳失敗，使用原始 URL:`, e.message);
+      return imageUrl;
+    }
+  }
+
+  // Cloudinary 上傳（透過 URL 直接抓取）
+  try {
+    const crypto    = require('crypto');
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = crypto.createHash('sha1')
+      .update(`timestamp=${timestamp}${apiSecret}`)
+      .digest('hex');
+    const form = new URLSearchParams({
+      file: imageUrl, api_key: apiKey,
+      timestamp: String(timestamp), signature,
+    });
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!res.ok) throw new Error(`Cloudinary ${res.status}`);
+    const data = await res.json();
+    console.log(`[Cloudinary] ✅ 永久存儲:`, data.secure_url.slice(0, 80));
+    return data.secure_url;
+  } catch (e) {
+    console.warn(`[Cloudinary] ⚠️ 上傳失敗，使用原始 URL:`, e.message);
+    return imageUrl;
+  }
+}
+
 // NovitaAI 圖片轉圖片（img2img）
 async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7, width = 768, height = 768) {
   const apiKey = process.env.NOVITA_API_KEY;
@@ -123,10 +180,11 @@ async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7
     const data = await pollRes.json();
     const status = data.task?.status;
     if (status === 'TASK_STATUS_SUCCEED') {
-      const urls = (data.images || []).map(img => img.image_url).filter(Boolean);
-      if (!urls.length) throw new Error('NovitaAI img2img：未返回圖片 URL');
-      console.log('[NovitaAI img2img] 完成:', urls[0].substring(0, 60));
-      return urls[0];
+      const rawUrls = (data.images || []).map(img => img.image_url).filter(Boolean);
+      if (!rawUrls.length) throw new Error('NovitaAI img2img：未返回圖片 URL');
+      const permanentUrl = await uploadToPermanentStorage(rawUrls[0]);
+      console.log('[NovitaAI img2img] 完成:', permanentUrl.substring(0, 80));
+      return permanentUrl;
     }
     if (status === 'TASK_STATUS_FAILED') {
       const reason = data.task?.reason || data.task?.err_detail || '未知錯誤';
@@ -191,9 +249,11 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
     const data = await pollRes.json();
     const status = data.task?.status;
     if (status === 'TASK_STATUS_SUCCEED') {
-      const urls = (data.images || []).map(img => img.image_url).filter(Boolean);
-      if (!urls.length) throw new Error('NovitaAI：未返回圖片 URL');
-      return urls; // 回傳 URL 陣列
+      const rawUrls = (data.images || []).map(img => img.image_url).filter(Boolean);
+      if (!rawUrls.length) throw new Error('NovitaAI：未返回圖片 URL');
+      // 上傳到永久存儲（解決 S3 signed URL 48小時過期問題）
+      const urls = await Promise.all(rawUrls.map(u => uploadToPermanentStorage(u)));
+      return urls;
     }
     if (status === 'TASK_STATUS_FAILED') {
       const reason = data.task?.reason || data.task?.err_detail || JSON.stringify(data.task) || '未知錯誤';
