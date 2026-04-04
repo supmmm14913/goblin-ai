@@ -269,18 +269,82 @@ function hasChinese(text) {
   return /[\u4e00-\u9fff\u3400-\u4dbf\uff00-\uffef]/.test(text);
 }
 
-// 翻譯單一短句（< 400 字元）
+// ── 動漫 / 遊戲 / 角色專有名詞字典（翻譯前先替換，避免翻譯 API 亂加內容）
+const PROPER_NOUN_MAP = {
+  '皮卡丘': 'Pikachu', '寶可夢': 'Pokemon', '神奇寶貝': 'Pokemon',
+  '小智': 'Ash Ketchum', '小霞': 'Misty', '小剛': 'Brock',
+  '卡比獸': 'Snorlax', '伊布': 'Eevee', '噴火龍': 'Charizard',
+  '妙蛙種子': 'Bulbasaur', '傑尼龜': 'Squirtle', '胖丁': 'Jigglypuff',
+  '超夢': 'Mewtwo', '夢幻': 'Mew', '快龍': 'Dragonite',
+  '鳴人': 'Naruto', '佐助': 'Sasuke', '小櫻': 'Sakura',
+  '悟空': 'Goku', '達爾': 'Vegeta', '比克': 'Piccolo',
+  '路飛': 'Luffy', '索隆': 'Zoro', '娜美': 'Nami', '山治': 'Sanji',
+  '哈利波特': 'Harry Potter', '妙麗': 'Hermione', '榮恩': 'Ron',
+  '鋼彈': 'Gundam', '機器人': 'robot', '機甲': 'mecha',
+  '蜘蛛人': 'Spider-Man', '鋼鐵人': 'Iron Man', '美國隊長': 'Captain America',
+  '蝙蝠俠': 'Batman', '超人': 'Superman', '神力女超人': 'Wonder Woman',
+  '林克': 'Link', '薩爾達': 'Zelda', '馬力歐': 'Mario', '路易吉': 'Luigi',
+  '索尼克': 'Sonic', '庫巴': 'Bowser', '奇諾比奧': 'Toad',
+  '貓咪': 'cat', '狗狗': 'dog', '兔子': 'rabbit', '熊貓': 'panda',
+};
+
+// 翻譯前先替換專有名詞，避免翻譯 API 亂改
+function replaceProperNouns(text) {
+  let result = text;
+  const placeholders = {};
+  let idx = 0;
+  // 按長度排序，先替換較長的詞（避免部分替換問題）
+  const sorted = Object.keys(PROPER_NOUN_MAP).sort((a, b) => b.length - a.length);
+  for (const zh of sorted) {
+    if (result.includes(zh)) {
+      const placeholder = `__NOUN${idx}__`;
+      placeholders[placeholder] = PROPER_NOUN_MAP[zh];
+      result = result.split(zh).join(placeholder);
+      idx++;
+    }
+  }
+  return { text: result, placeholders };
+}
+
+function restoreProperNouns(text, placeholders) {
+  let result = text;
+  for (const [placeholder, en] of Object.entries(placeholders)) {
+    result = result.split(placeholder).join(en);
+  }
+  return result;
+}
+
+// 翻譯單一短句（< 400 字元）— 主用 Google Translate，備援 MyMemory
 async function translateChunk(chunk) {
+  // 先保護專有名詞不被翻壞
+  const { text: protectedText, placeholders } = replaceProperNouns(chunk);
+
+  // 主要：Google Translate 非官方端點（更準確、不亂加內容）
   try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=zh|en`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    const data = await res.json();
-    if (data.responseStatus === 200 && data.responseData?.translatedText) {
-      const t = data.responseData.translatedText;
-      if (!hasChinese(t)) return t;
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=zh-TW&tl=en&dt=t&q=${encodeURIComponent(protectedText)}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Mozilla/5.0' } });
+    if (res.ok) {
+      const data = await res.json();
+      const translated = (data[0] || []).map(seg => seg?.[0] || '').join('');
+      if (translated && !hasChinese(translated)) {
+        return restoreProperNouns(translated, placeholders);
+      }
+    }
+  } catch (e) { /* ignore, 備援 */ }
+
+  // 備援：MyMemory
+  try {
+    const url2 = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(protectedText)}&langpair=zh|en`;
+    const res2 = await fetch(url2, { signal: AbortSignal.timeout(8000) });
+    const data2 = await res2.json();
+    if (data2.responseStatus === 200 && data2.responseData?.translatedText) {
+      const t = data2.responseData.translatedText;
+      if (!hasChinese(t)) return restoreProperNouns(t, placeholders);
     }
   } catch (e) { /* ignore */ }
-  return chunk; // 翻譯失敗就保留原文
+
+  // 都失敗：還原專有名詞後回傳
+  return restoreProperNouns(protectedText, placeholders);
 }
 
 // ── 人名偵測 + 外觀描述注入（翻譯後直接注入，繞過翻譯損失）──────
