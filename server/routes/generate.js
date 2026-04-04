@@ -59,6 +59,7 @@ const NOVITA_MODELS = {
   'novita-epic-photo-xpp':     'epicphotogasm_xPlusPlus_135412.safetensors',
   'novita-epic-photo-x':       'epicphotogasm_x_131265.safetensors',
   'novita-majicmix':           'majicmixRealistic_v6_65516.safetensors',
+  'novita-magmix-v10':         'sd1.5/magmix_v10',
   // 動漫
   'novita-meina-hentai':       'meinahentai_v4_70340.safetensors',
   'novita-rev-animated':       'revAnimated_v122.safetensors',

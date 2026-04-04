@@ -146,6 +146,7 @@ const MODEL_CATEGORIES = [
       { id: 'novita-epic-photo-xpp',  name: 'Epic Photogasm X++',     desc: '超高清攝影人像' },
       { id: 'novita-epic-photo-x',    name: 'Epic Photogasm X',       desc: '攝影級畫質' },
       { id: 'novita-majicmix',        name: 'Majic Mix Realistic v6', desc: '魔幻寫實混合' },
+      { id: 'novita-magmix-v10',      name: 'MagMix V10',             desc: '寫實混合 SD1.5', badge: 'NEW' },
       { id: 'novita-sdxl',            name: 'SDXL Base 1.0',          desc: '通用高解析度' },
     ]
   },
