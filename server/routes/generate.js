@@ -451,50 +451,73 @@ function detectGenderHint(extract) {
   return '';
 }
 
-// ── 網路搜尋人物（優先 Wikipedia 圖片 + DuckDuckGo 文字）────────────────
-const PERSON_KEYWORDS_RE = /人物|演員|歌手|政治|運動員|YouTuber|youtuber|主持人|作家|導演|模特兒|明星|藝人|醫師|教授|選手|球員|律師|記者|創作者|網紅|網路紅人|評論|時事|主播|直播|媒體/;
-
-async function searchPersonOnWeb(name) {
+// ── 通用網路搜尋（任意命名實體：人物、地點、角色、物品等）────────────
+// 支援中文名稱（zh Wikipedia）與英文名稱（en Wikipedia + DuckDuckGo）
+async function searchEntityOnWeb(name) {
   let imageUrl = null;
   let textDesc = null;
 
-  // Step 1：Wikipedia zh — 取摘要 + 人物縮圖
+  // Step 1a：中文 Wikipedia
   try {
     const wikiUrl = `https://zh.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
-    const wikiRes = await fetch(wikiUrl, { signal: AbortSignal.timeout(5000) });
+    const wikiRes = await fetch(wikiUrl, { signal: AbortSignal.timeout(6000) });
     if (wikiRes.ok) {
       const wd = await wikiRes.json();
-      if (wd.type !== 'disambiguation' && wd.extract) {
-        const combined = (wd.description || '') + wd.extract.slice(0, 300);
-        if (PERSON_KEYWORDS_RE.test(combined)) {
-          // 取較大尺寸縮圖（供 img2img 使用）
-          if (wd.thumbnail?.source) {
-            imageUrl = wd.thumbnail.source.replace(/\/\d+px-/, '/400px-');
-          }
-          const bm    = wd.extract.match(/[（(](\d{4})年/);
-          const age   = bm ? new Date().getFullYear() - parseInt(bm[1]) : null;
-          const isM   = /\b他\b|男性|男演員|男歌手|男政治/.test(wd.extract.slice(0, 300));
-          const isF   = /\b她\b|女性|女演員|女歌手|女政治/.test(wd.extract.slice(0, 300));
+      if (wd.type !== 'disambiguation' && wd.extract && wd.extract.length > 30) {
+        if (wd.thumbnail?.source) imageUrl = wd.thumbnail.source.replace(/\/\d+px-/, '/400px-');
+        const desc = (wd.description || '').replace(/[\n\r]/g, ' ').trim();
+        const extract = wd.extract.slice(0, 200).replace(/[\n\r]/g, ' ');
+        // 判斷實體類型
+        const isPerson = /人物|演員|歌手|政治|運動員|主持人|作家|導演|模特兒|明星|藝人|醫師|教授|選手|記者|網紅/.test(extract + desc);
+        const bm  = extract.match(/[（(](\d{4})年/);
+        const age = bm ? new Date().getFullYear() - parseInt(bm[1]) : null;
+        const isM = /\b他\b|男性|男演員|男歌手|男政治/.test(extract);
+        const isF = /\b她\b|女性|女演員|女歌手|女政治/.test(extract);
+        if (isPerson) {
           const gender = isM ? 'male' : isF ? 'female' : '';
-          const desc   = (wd.description || '').replace(/[\n\r]/g, ' ').trim();
-          textDesc = ['portrait photo of ' + name, gender, age ? `${age} years old` : '', desc, 'East Asian complexion', 'photorealistic portrait'].filter(Boolean).join(', ');
-          console.log(`[Web Search] Wikipedia "${name}" 圖:${imageUrl ? '✅' : '❌'} 描:✅`);
+          textDesc = ['portrait photo of ' + name, gender, age ? `${age} years old` : '', desc, 'East Asian complexion, photorealistic portrait'].filter(Boolean).join(', ');
+        } else {
+          textDesc = [name, desc, extract.slice(0, 100), 'highly detailed, accurate depiction, photorealistic'].filter(Boolean).join(', ');
         }
+        console.log(`[搜尋] zh-Wiki "${name}" type=${isPerson?'person':'entity'} 圖:${imageUrl?'✅':'❌'} 描:✅`);
       }
     }
   } catch (e) { /* ignore */ }
 
-  // Step 2：DuckDuckGo Instant Answer（無需 API key，備援）
-  if (!textDesc || !imageUrl) {
+  // Step 1b：英文 Wikipedia（當中文維基找不到或名稱為英文時）
+  if (!textDesc) {
+    try {
+      const wikiEnUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`;
+      const wikiEnRes = await fetch(wikiEnUrl, { signal: AbortSignal.timeout(6000) });
+      if (wikiEnRes.ok) {
+        const wd = await wikiEnRes.json();
+        if (wd.type !== 'disambiguation' && wd.extract && wd.extract.length > 30) {
+          if (!imageUrl && wd.thumbnail?.source) imageUrl = wd.thumbnail.source.replace(/\/\d+px-/, '/400px-');
+          const desc = (wd.description || '').replace(/[\n\r]/g, ' ').trim();
+          const extract = wd.extract.slice(0, 200).replace(/[\n\r]/g, ' ');
+          const isPerson = /actor|singer|politician|athlete|director|author|musician|YouTuber|journalist|model/.test(extract + desc);
+          if (isPerson) {
+            textDesc = [`portrait photo of ${name}`, desc, 'photorealistic portrait'].filter(Boolean).join(', ');
+          } else {
+            textDesc = [name, desc, 'highly detailed, accurate depiction, photorealistic'].filter(Boolean).join(', ');
+          }
+          console.log(`[搜尋] en-Wiki "${name}" 圖:${imageUrl?'✅':'❌'} 描:✅`);
+        }
+      }
+    } catch (e) { /* ignore */ }
+  }
+
+  // Step 2：DuckDuckGo Instant Answer（備援）
+  if (!textDesc) {
     try {
       const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(name)}&format=json&no_html=1&skip_disambig=1`;
       const ddgRes = await fetch(ddgUrl, { signal: AbortSignal.timeout(5000) });
       if (ddgRes.ok) {
         const ddg = await ddgRes.json();
         if (!imageUrl && ddg.Image) imageUrl = `https://duckduckgo.com${ddg.Image}`;
-        if (!textDesc && ddg.AbstractText) {
-          textDesc = `portrait photo of ${name}, ${ddg.AbstractText.slice(0, 150)}, East Asian complexion, photorealistic portrait`;
-          console.log(`[Web Search] DuckDuckGo "${name}" 描:✅`);
+        if (ddg.AbstractText) {
+          textDesc = `${name}, ${ddg.AbstractText.slice(0, 150)}, highly detailed, photorealistic`;
+          console.log(`[搜尋] DuckDuckGo "${name}" 描:✅`);
         }
       }
     } catch (e) { /* ignore */ }
@@ -502,6 +525,9 @@ async function searchPersonOnWeb(name) {
 
   return { imageUrl, textDesc };
 }
+
+// 保留舊名稱供相容
+const searchPersonOnWeb = searchEntityOnWeb;
 
 // 偵測提詞中的人名，收集英文外觀描述 + 網路參考圖片（翻譯後注入）
 async function collectPersonDescriptionsEN(chineseText) {
@@ -525,34 +551,83 @@ async function collectPersonDescriptionsEN(chineseText) {
     }
   }
 
-  // ── 第二步：分割法找資料庫之外的候選人名，網路搜尋 ────────────────
+  // ── 第二步：分割法找資料庫之外的候選詞（擴展到 2-6 字，包含地點/角色/物品）──
   let cleaned = chineseText;
   for (const v of VERB_PREFIXES) cleaned = cleaned.replace(new RegExp(v, 'g'), ' ');
   const funcPattern = /[的了是在有與和之及也都你我他她它們這那哪什麼怎麼為什麼、，。！？「」【】《》\s]+/g;
   const parts = cleaned.split(funcPattern).filter(Boolean);
   const candidates = [...new Set(parts)].filter(w =>
-    w.length >= 2 && w.length <= 4 &&
+    w.length >= 2 && w.length <= 6 &&   // 擴展到 6 字（地名/角色名較長）
     /^[\u4e00-\u9fff]+$/.test(w) &&
     !PERSON_STOP_WORDS.has(w) &&
+    !PROPER_NOUN_MAP[w] &&               // 已在字典中的不重複搜尋
     !CELEBRITY_DB_EN[w] &&
     !usedNames.includes(w)
   );
   if (candidates.length > 0) {
     const searchResults = await Promise.all(
-      candidates.slice(0, 3).map(async n => ({ n, result: await searchPersonOnWeb(n) }))
+      candidates.slice(0, 4).map(async n => ({ n, result: await searchEntityOnWeb(n) }))
     );
     for (const { n, result } of searchResults) {
       if (result.textDesc) {
         descriptions.push(result.textDesc);
-        console.log(`[Web Search] "${n}" 已收集網路描述`);
+        console.log(`[搜尋] "${n}" 已收集網路描述`);
       }
       if (result.imageUrl) {
         referenceImages.push(result.imageUrl);
-        console.log(`[Web Search] "${n}" 已取得參考圖片`);
+        console.log(`[搜尋] "${n}" 已取得參考圖片`);
       }
     }
   }
 
+  return { descriptions, referenceImages };
+}
+
+// 英文提詞中偵測專有名詞並搜尋（大寫開頭的詞組，排除常見英文停用詞）
+const EN_STOP_WORDS = new Set([
+  'a','an','the','in','on','at','of','to','for','with','by','from','and','or','but',
+  'is','are','was','were','be','been','being','have','has','had','do','does','did',
+  'will','would','could','should','may','might','can','shall',
+  'i','you','he','she','it','we','they','me','him','her','us','them',
+  'this','that','these','those','what','which','who','where','when','how','why',
+  'very','much','many','some','any','all','each','every','both','few','more','most',
+  'style','art','photo','image','video','render','quality','high','low','ultra','best',
+  'beautiful','amazing','stunning','detailed','realistic','cinematic','anime','fantasy',
+  'background','foreground','scene','setting','lighting','shadow','color','colour',
+  'portrait','landscape','closeup','full','body','face','character','person','man','woman',
+]);
+
+async function collectEntityDescriptionsEN_forEnglish(englishText) {
+  const descriptions  = [];
+  const referenceImages = [];
+
+  // 偵測 Title Case 詞組（2+ 大寫開頭的詞，或單一較長的 PascalCase 詞）
+  const titleCaseMatches = [...englishText.matchAll(/\b([A-Z][a-z]{1,}(?:\s+[A-Z][a-z]{1,}){0,3})\b/g)]
+    .map(m => m[1])
+    .filter(n => {
+      const words = n.split(' ');
+      // 過濾：所有詞都在停用詞表中 → 不搜尋
+      return words.some(w => !EN_STOP_WORDS.has(w.toLowerCase())) && n.length >= 4;
+    });
+  // 去重並限制數量
+  const uniqueCandidates = [...new Set(titleCaseMatches)].slice(0, 4);
+  if (uniqueCandidates.length === 0) return { descriptions, referenceImages };
+
+  console.log(`[英文實體偵測] 候選詞: ${uniqueCandidates.join(', ')}`);
+
+  const searchResults = await Promise.all(
+    uniqueCandidates.map(async n => ({ n, result: await searchEntityOnWeb(n) }))
+  );
+  for (const { n, result } of searchResults) {
+    if (result.textDesc) {
+      descriptions.push(result.textDesc);
+      console.log(`[英文搜尋] "${n}" 已收集描述`);
+    }
+    if (result.imageUrl && referenceImages.length === 0) {
+      referenceImages.push(result.imageUrl);
+      console.log(`[英文搜尋] "${n}" 已取得參考圖片`);
+    }
+  }
   return { descriptions, referenceImages };
 }
 
@@ -627,34 +702,47 @@ function enhancePrompt(prompt, style) {
 async function preparePrompt(prompt, style) {
   if (!prompt) return prompt;
   let p = prompt.replace(/\s*--\s*style:.*$/i, '').trim();
-  let personDescriptions = [];
+  let entityDescriptions = [];
   if (hasChinese(p)) {
     const collected = await collectPersonDescriptionsEN(p);
-    personDescriptions = collected.descriptions || [];
+    entityDescriptions = collected.descriptions || [];
     p = await translateToEnglish(p);
+  } else {
+    const collected = await collectEntityDescriptionsEN_forEnglish(p);
+    entityDescriptions = collected.descriptions || [];
   }
-  if (personDescriptions.length > 0) {
-    p = personDescriptions.join(', ') + ', ' + p;
-    console.log('[人物描述已注入翻譯後提詞]', p.slice(0, 120));
+  if (entityDescriptions.length > 0) {
+    p = entityDescriptions.join(', ') + ', ' + p;
+    console.log('[實體描述已注入提詞]', p.slice(0, 120));
   }
   return enhancePrompt(p, style);
 }
 
 // 自動翻譯 + 強化提示詞（完整版，同時回傳網路參考圖片 URL，供文生圖自動 img2img）
+// 支援中文提詞（翻譯+實體搜尋）與英文提詞（直接實體搜尋）
 async function preparePromptFull(prompt, style) {
   if (!prompt) return { text: prompt, referenceImages: [] };
   let p = prompt.replace(/\s*--\s*style:.*$/i, '').trim();
-  let personDescriptions = [];
+  let entityDescriptions = [];
   let referenceImages    = [];
+
   if (hasChinese(p)) {
+    // ── 中文提詞：翻譯 + 搜尋中文命名實體 ─────────────────────
     const collected = await collectPersonDescriptionsEN(p);
-    personDescriptions = collected.descriptions  || [];
+    entityDescriptions = collected.descriptions  || [];
     referenceImages    = collected.referenceImages || [];
     p = await translateToEnglish(p);
+  } else {
+    // ── 英文提詞：直接搜尋 Title Case 專有名詞 ──────────────────
+    const collected = await collectEntityDescriptionsEN_forEnglish(p);
+    entityDescriptions = collected.descriptions  || [];
+    referenceImages    = collected.referenceImages || [];
   }
-  if (personDescriptions.length > 0) {
-    p = personDescriptions.join(', ') + ', ' + p;
-    console.log('[人物描述已注入翻譯後提詞]', p.slice(0, 120));
+
+  if (entityDescriptions.length > 0) {
+    // 將搜尋到的實體描述注入提詞前段，提升準確度
+    p = entityDescriptions.join(', ') + ', ' + p;
+    console.log('[實體描述已注入提詞]', p.slice(0, 150));
   }
   return { text: enhancePrompt(p, style), referenceImages };
 }
