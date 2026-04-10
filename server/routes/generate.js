@@ -127,7 +127,7 @@ async function uploadToPermanentStorage(imageUrl) {
 }
 
 // NovitaAI 圖片轉圖片（img2img）
-async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7, width = 768, height = 768) {
+async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7, width = 768, height = 768, negativePrompt = '') {
   const apiKey = process.env.NOVITA_API_KEY;
   if (!apiKey) throw new Error('NOVITA_API_KEY 未設定');
 
@@ -145,7 +145,7 @@ async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7
       model_name:       modelName,
       image_base64:     base64Data,
       prompt:           safePrompt,
-      negative_prompt:  'ugly, blurry, low quality, watermark, text, logo, bad anatomy, deformed',
+      negative_prompt:  (negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy, deformed').slice(0, 1500),
       strength:         Math.min(Math.max(parseFloat(strength), 0.1), 1.0),
       width:            reqW,
       height:           reqH,
@@ -213,7 +213,7 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
     request: {
       model_name: modelName,
       prompt: safePrompt,
-      negative_prompt: (negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy').slice(0, 512),
+      negative_prompt: (negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy').slice(0, 1500),
       width:  reqW,
       height: reqH,
       steps: 25,
@@ -557,7 +557,7 @@ async function collectPersonDescriptionsEN(chineseText) {
   const funcPattern = /[的了是在有與和之及也都你我他她它們這那哪什麼怎麼為什麼、，。！？「」【】《》\s]+/g;
   const parts = cleaned.split(funcPattern).filter(Boolean);
   const candidates = [...new Set(parts)].filter(w =>
-    w.length >= 2 && w.length <= 6 &&   // 擴展到 6 字（地名/角色名較長）
+    w.length >= 2 && w.length <= 10 &&  // 擴展到 10 字（地名/角色名/物品名）
     /^[\u4e00-\u9fff]+$/.test(w) &&
     !PERSON_STOP_WORDS.has(w) &&
     !PROPER_NOUN_MAP[w] &&               // 已在字典中的不重複搜尋
