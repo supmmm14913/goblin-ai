@@ -64,6 +64,7 @@ async function sendResetEmail(email, username, token, clientUrl) {
       secure: false,
       auth: { user: smtpUser, pass: smtpPass },
       tls: { rejectUnauthorized: false },
+      family: 4,
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 20000,
