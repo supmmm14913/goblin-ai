@@ -2,7 +2,7 @@
   "buildCommand": "cd client && npm install && npm run build",
   "outputDirectory": "client/dist",
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://goblin-ai-production.up.railway.app/api/:path*" },
+    { "source": "/api/:path*", "destination": "https://goblin-ai.onrender.com/api/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
