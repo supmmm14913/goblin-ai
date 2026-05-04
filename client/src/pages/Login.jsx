@@ -21,7 +21,11 @@ export default function Login() {
       login(res.data.token, res.data.user)
       toast.success('歡迎回來！')
     } catch (err) {
-      const msg = err.response?.data?.error || '登入失敗'
+      // 判斷是否為後端伺服器離線（Railway 停機）
+      const isServerDown = !err.response || err.response?.data?.message === 'Application not found'
+      const msg = isServerDown
+        ? '⚠️ 伺服器暫時離線，請稍後再試或聯繫管理員'
+        : (err.response?.data?.error || '登入失敗，請確認帳號密碼')
       setErrorMsg(msg)
       toast.error(msg)
     } finally { setLoading(false) }
