@@ -127,7 +127,7 @@ async function uploadToPermanentStorage(imageUrl) {
 }
 
 // NovitaAI 圖片轉圖片（img2img）
-async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7, width = 768, height = 768, negativePrompt = '') {
+async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7, width = 768, height = 768, negativePrompt = '', seed = -1) {
   const apiKey = process.env.NOVITA_API_KEY;
   if (!apiKey) throw new Error('NOVITA_API_KEY 未設定');
 
@@ -149,11 +149,11 @@ async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7
       strength:         Math.min(Math.max(parseFloat(strength), 0.1), 1.0),
       width:            reqW,
       height:           reqH,
-      steps:            25,
-      guidance_scale:   7,
-      sampler_name:     'Euler a',
+      steps:            30,
+      guidance_scale:   12,
+      sampler_name:     'DPM++ 2M Karras',
       image_num:        1,
-      seed:             -1,
+      seed:             (seed && seed !== -1) ? parseInt(seed) : -1,
     }
   };
   console.log('[NovitaAI img2img] 提交:', { model_name: modelName, strength, width: reqW, height: reqH });
@@ -195,7 +195,7 @@ async function novitaImageToImage(modelName, prompt, imageBase64, strength = 0.7
 }
 
 // NovitaAI 文字生成圖片（非同步輪詢，後端等待結果）
-async function novitaTextToImage(modelName, prompt, negativePrompt, width, height, count = 1) {
+async function novitaTextToImage(modelName, prompt, negativePrompt, width, height, count = 1, seed = -1) {
   const apiKey = process.env.NOVITA_API_KEY;
   if (!apiKey) throw new Error('NOVITA_API_KEY 未設定，請至 Railway 環境變數新增');
 
@@ -216,11 +216,11 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
       negative_prompt: (negativePrompt || 'ugly, blurry, low quality, watermark, text, logo, bad anatomy').slice(0, 1500),
       width:  reqW,
       height: reqH,
-      steps: 25,
-      guidance_scale: 7,
-      sampler_name: 'Euler a',
+      steps: 30,
+      guidance_scale: 12,
+      sampler_name: 'DPM++ 2M Karras',
       image_num: Math.min(Math.max(count, 1), 8),
-      seed: -1,
+      seed: (seed && seed !== -1) ? parseInt(seed) : -1,
     }
   };
   console.log('[NovitaAI] 提交:', { model_name: modelName, width: reqW, height: reqH });
@@ -251,9 +251,10 @@ async function novitaTextToImage(modelName, prompt, negativePrompt, width, heigh
     if (status === 'TASK_STATUS_SUCCEED') {
       const rawUrls = (data.images || []).map(img => img.image_url).filter(Boolean);
       if (!rawUrls.length) throw new Error('NovitaAI：未返回圖片 URL');
+      const seedUsed = data.images?.[0]?.seed ?? data.task?.seed ?? -1;
       // 上傳到永久存儲（解決 S3 signed URL 48小時過期問題）
       const urls = await Promise.all(rawUrls.map(u => uploadToPermanentStorage(u)));
-      return urls;
+      return { urls, seedUsed };
     }
     if (status === 'TASK_STATUS_FAILED') {
       const reason = data.task?.reason || data.task?.err_detail || JSON.stringify(data.task) || '未知錯誤';
@@ -772,8 +773,9 @@ const COMMUNITY_MODEL_IDS = new Set(['sdxl', 'dreamshaper-xl', 'realistic-vision
 
 // 文字生成圖片
 router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), async (req, res) => {
-  const { prompt, negative_prompt, width = 1024, height = 1024, style = 'none', quality = 'standard', model: reqModel = '' } = req.body;
+  const { prompt, negative_prompt, width = 1024, height = 1024, style = 'none', quality = 'standard', model: reqModel = '', seed: reqSeed } = req.body;
   const imageCount = req.imageCount || 1; // 批量數量（1~8）
+  const userSeed = reqSeed ? parseInt(reqSeed) : -1;
 
   // NovitaAI / 社群模型直接使用；FLUX 系列走 quality 對應
   let model;
@@ -808,6 +810,7 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
     // ── NovitaAI 分支 ────────────────────────────────────────
     if (model in NOVITA_MODELS) {
       let imageUrls;
+      let seedUsed = userSeed;
 
       // ── 若找到人物真實照片，自動改用 img2img（大幅提升相似度）────
       if (referenceImages.length > 0) {
@@ -819,30 +822,32 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
           const mime    = refRes.headers.get('content-type') || 'image/jpeg';
           const base64Ref = `data:${mime};base64,${refBuf.toString('base64')}`;
           // strength=0.65：保留真人臉部特徵，同時允許風格化
-          const singleUrl = await novitaImageToImage(NOVITA_MODELS[model], finalPrompt, base64Ref, 0.65, Math.min(width, 768), Math.min(height, 768));
+          const singleUrl = await novitaImageToImage(NOVITA_MODELS[model], finalPrompt, base64Ref, 0.65, Math.min(width, 768), Math.min(height, 768), fullNeg, userSeed);
           imageUrls = [singleUrl];
           console.log(`[自動 img2img] ✅ 成功使用真人照片生成`);
         } catch (imgErr) {
           console.warn(`[自動 img2img] ⚠️ 失敗，回退 txt2img:`, imgErr.message);
-          imageUrls = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount);
+          const result = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount, userSeed);
+          imageUrls = result.urls; seedUsed = result.seedUsed;
         }
       } else {
-        imageUrls = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount);
+        const result = await novitaTextToImage(NOVITA_MODELS[model], finalPrompt, fullNeg, width, height, imageCount, userSeed);
+        imageUrls = result.urls; seedUsed = result.seedUsed;
       }
 
       // 儲存第一張到原始 id，額外張各建一筆記錄
-      await db.updateOne('generations', { id }, { image_url: imageUrls[0], status: 'completed', prompt_en: finalPrompt });
+      await db.updateOne('generations', { id }, { image_url: imageUrls[0], status: 'completed', prompt_en: finalPrompt, seed: seedUsed });
       for (let i = 1; i < imageUrls.length; i++) {
         await db.insertOne('generations', {
           id: uuidv4(), user_id: req.user.id, type: 'text-to-image',
           prompt, negative_prompt: negative_prompt || null, model,
           width, height, image_url: imageUrls[i], status: 'completed',
-          is_public: false, credit_cost: 0, prompt_en: finalPrompt,
+          is_public: false, credit_cost: 0, prompt_en: finalPrompt, seed: seedUsed,
           created_at: new Date().toISOString()
         });
       }
       const updatedUser = await db.findOne('users', { id: req.user.id });
-      return res.json({ id, image_url: imageUrls[0], image_urls: imageUrls, status: 'completed', credits: updatedUser.credits });
+      return res.json({ id, image_url: imageUrls[0], image_urls: imageUrls, status: 'completed', credits: updatedUser.credits, seed_used: seedUsed });
     }
 
     // ── Replicate 分支 ────────────────────────────────────────
@@ -857,8 +862,8 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
       input.width  = Math.min(width,  maxRes);
       input.height = Math.min(height, maxRes);
       if (fullNeg) input.negative_prompt = fullNeg;
-      input.guidance_scale      = 7.5;
-      input.num_inference_steps = SD15_MODELS.has(model) ? 30 : 25;
+      input.guidance_scale      = 10;
+      input.num_inference_steps = SD15_MODELS.has(model) ? 35 : 30;
       input.num_outputs         = imageCount;
     }
 

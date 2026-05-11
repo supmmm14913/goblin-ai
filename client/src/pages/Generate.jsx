@@ -226,6 +226,8 @@ export default function Generate() {
   const [resultIds, setResultIds] = useState([]) // 對應的 generation id
   const [publishedIds, setPublishedIds] = useState(new Set()) // 已領獎的 id
   const [dailyReward, setDailyReward] = useState({ today_count: 0, daily_limit: 5 })
+  const [seed, setSeed] = useState('')          // 使用者輸入的 seed（空 = 隨機）
+  const [lastSeed, setLastSeed] = useState(null) // 上次生成使用的 seed
 
   // 手機版：生成完成後自動捲到結果區
   useEffect(() => {
@@ -343,7 +345,8 @@ export default function Generate() {
       if (tab === 'text-image') {
         const res = await axios.post('/generate/text-to-image', {
           prompt: styledPrompt, negative_prompt: negativePrompt,
-          model, width: size.w, height: size.h, style, quality, image_count: imageCount
+          model, width: size.w, height: size.h, style, quality, image_count: imageCount,
+          seed: seed !== '' ? parseInt(seed) : -1,
         })
         const urls = res.data.image_urls || [res.data.image_url]
         // 建立 id 列表：第一張用回傳的 id，批量的額外張先用 index placeholder
@@ -351,6 +354,7 @@ export default function Generate() {
         setResults(urls); setResult(urls[0]); setResultType('image')
         setResultIds(ids); setPublishedIds(new Set())
         if (res.data.credits !== undefined) updateCredits(res.data.credits)
+        if (res.data.seed_used && res.data.seed_used !== -1) setLastSeed(res.data.seed_used)
         fetchDailyReward()
         toast.success(urls.length > 1 ? `成功生成 ${urls.length} 張圖片！` : '圖片生成成功！')
         setLoading(false); setLoadingMsg('')
@@ -696,20 +700,46 @@ export default function Generate() {
           {showAdvanced && (
             <div className="mt-2 bg-[#111114] border border-white/8 rounded-xl p-3 space-y-3">
               {tab === 'text-image' && (
-                <div>
-                  <label className="text-xs text-white/40 mb-1.5 block">負面提示詞（排除不想要的元素）</label>
-                  <textarea className="input-field resize-none text-xs" rows={2}
-                    placeholder="blurry, ugly, low quality, watermark, extra fingers..."
-                    value={negativePrompt} onChange={e => setNegativePrompt(e.target.value)} disabled={loading}
-                    maxLength={512} />
-                  {negativePrompt.length > 384 && (
-                    <div className="flex justify-end mt-0.5">
-                      <span style={{ color: negativePrompt.length >= 512 ? '#ef4444' : '#f97316', fontSize: 10 }}>
-                        {negativePrompt.length} / 512
-                      </span>
+                <>
+                  <div>
+                    <label className="text-xs text-white/40 mb-1.5 block">負面提示詞（排除不想要的元素）</label>
+                    <textarea className="input-field resize-none text-xs" rows={2}
+                      placeholder="blurry, ugly, low quality, watermark, extra fingers..."
+                      value={negativePrompt} onChange={e => setNegativePrompt(e.target.value)} disabled={loading}
+                      maxLength={1500} />
+                    {negativePrompt.length > 1200 && (
+                      <div className="flex justify-end mt-0.5">
+                        <span style={{ color: negativePrompt.length >= 1500 ? '#ef4444' : '#f97316', fontSize: 10 }}>
+                          {negativePrompt.length} / 1500
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-xs text-white/40 mb-1.5 block">種子 Seed（相同種子 = 相同結果，留空為隨機）</label>
+                    <div className="flex gap-2 items-center">
+                      <input type="number" min="0" max="2147483647"
+                        className="input-field text-xs flex-1"
+                        placeholder="留空 = 隨機"
+                        value={seed} onChange={e => setSeed(e.target.value)} disabled={loading} />
+                      {seed !== '' && (
+                        <button onClick={() => setSeed('')} disabled={loading}
+                          className="text-xs text-white/30 hover:text-white/60 px-2 py-1 rounded-lg border border-white/10 hover:border-white/20 transition-colors">
+                          清除
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
+                    {lastSeed !== null && (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        <span className="text-[10px] text-white/30">上次種子：{lastSeed}</span>
+                        <button onClick={() => setSeed(String(lastSeed))} disabled={loading}
+                          className="text-[10px] text-[#c8ff3e]/70 hover:text-[#c8ff3e] border border-[#c8ff3e]/20 hover:border-[#c8ff3e]/50 px-2 py-0.5 rounded transition-colors">
+                          🔒 鎖定此種子
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
               {tab === 'image-image' && (
                 <div>
