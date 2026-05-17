@@ -14,7 +14,14 @@ export function AuthProvider({ children }) {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
       axios.get('/auth/me')
         .then(res => setUser(res.data.user))
-        .catch(() => { localStorage.removeItem('token'); delete axios.defaults.headers.common['Authorization'] })
+        .catch((err) => {
+          // 只有在明確的認證失敗（401/403）時才清除 token
+          // 網路錯誤或後端冷啟動時不要清除，避免用戶被強制登出
+          if (err.response?.status === 401 || err.response?.status === 403) {
+            localStorage.removeItem('token');
+            delete axios.defaults.headers.common['Authorization'];
+          }
+        })
         .finally(() => setLoading(false))
     } else {
       setLoading(false)

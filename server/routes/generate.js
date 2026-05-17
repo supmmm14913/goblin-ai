@@ -771,6 +771,60 @@ function checkCredits(type) {
 // 社群模型（直接使用用戶選擇的模型，不走 quality 對應）
 const COMMUNITY_MODEL_IDS = new Set(['sdxl', 'dreamshaper-xl', 'realistic-vision', 'anything-v5', 'deliberate-v2']);
 
+// ── 無認證測試端點（供 Claw 自動化診斷使用）─────────────────────────
+router.post('/test/text-to-image', async (req, res) => {
+  const { prompt = '1girl, anime style, cute' } = req.body;
+
+  const hasReplicate = !!process.env.REPLICATE_API_TOKEN;
+  const hasNovita    = !!process.env.NOVITA_API_KEY;
+
+  try {
+    // 1. 優先用 NovitaAI
+    if (hasNovita) {
+      const finalPrompt = await preparePrompt(prompt, 'anime');
+      const result = await novitaTextToImage(
+        NOVITA_MODELS['novita-rev-animated'], finalPrompt, '', 512, 512, 1
+      );
+      return res.json({ status: 'success', provider: 'novita', image_url: result.urls[0], prompt_en: finalPrompt });
+    }
+
+    // 2. 備援：Replicate flux-schnell
+    if (hasReplicate) {
+      const replicate = new Replicate({ auth: process.env.REPLICATE_API_TOKEN });
+      const finalPrompt = await preparePrompt(prompt, 'anime');
+      const output = await replicate.run('black-forest-labs/flux-schnell', {
+        input: { prompt: finalPrompt, aspect_ratio: '1:1', num_outputs: 1 }
+      });
+      const imageUrl = Array.isArray(output) ? output[0] : String(output);
+      return res.json({ status: 'success', provider: 'replicate', image_url: imageUrl, prompt_en: finalPrompt });
+    }
+
+    // 3. 免費備援：Pollinations.ai（不需 API 金鑰）
+    const safePrompt = encodeURIComponent(prompt.slice(0, 300));
+    const pollinationsUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=512&height=512&nologo=true&seed=${Date.now() % 100000}`;
+    // 驗證 URL 有效
+    const testRes = await fetch(pollinationsUrl, { method: 'HEAD', signal: AbortSignal.timeout(10000) });
+    if (!testRes.ok) throw new Error(`Pollinations 回應 ${testRes.status}`);
+    return res.json({
+      status: 'success',
+      provider: 'pollinations',
+      image_url: pollinationsUrl,
+      prompt_en: prompt,
+      note: 'API 金鑰未設定，使用免費 Pollinations.ai。如需更高品質，請設定 NOVITA_API_KEY 或 REPLICATE_API_TOKEN',
+    });
+
+  } catch (err) {
+    return res.status(500).json({
+      error: '圖片生成失敗',
+      message: err.message,
+      diagnosis: {
+        REPLICATE_API_TOKEN: hasReplicate ? '已設定' : '未設定 → https://replicate.com/account/api-tokens',
+        NOVITA_API_KEY:      hasNovita    ? '已設定' : '未設定 → https://novita.ai/settings/key-management',
+      }
+    });
+  }
+});
+
 // 文字生成圖片
 router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), async (req, res) => {
   const { prompt, negative_prompt, width = 1024, height = 1024, style = 'none', quality = 'standard', model: reqModel = '', seed: reqSeed } = req.body;
@@ -848,6 +902,15 @@ router.post('/text-to-image', authMiddleware, checkCredits('text-to-image'), asy
       }
       const updatedUser = await db.findOne('users', { id: req.user.id });
       return res.json({ id, image_url: imageUrls[0], image_urls: imageUrls, status: 'completed', credits: updatedUser.credits, seed_used: seedUsed });
+    }
+
+    // ── Pollinations 備援（兩個 API Key 都沒設定時）──────────────────────
+    if (!process.env.REPLICATE_API_TOKEN) {
+      const safePrompt = encodeURIComponent(finalPrompt.slice(0, 300));
+      const pollinationsUrl = `https://image.pollinations.ai/prompt/${safePrompt}?width=${Math.min(width,1024)}&height=${Math.min(height,1024)}&nologo=true&seed=${Date.now() % 100000}`;
+      await db.updateOne('generations', { id }, { image_url: pollinationsUrl, status: 'completed', prompt_en: finalPrompt });
+      const updatedUser = await db.findOne('users', { id: req.user.id });
+      return res.json({ id, image_url: pollinationsUrl, image_urls: [pollinationsUrl], status: 'completed', credits: updatedUser.credits, provider: 'pollinations' });
     }
 
     // ── Replicate 分支 ────────────────────────────────────────
